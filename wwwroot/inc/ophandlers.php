@@ -1043,6 +1043,10 @@ function addIPv4Prefix ()
 	$vlan_ck = empty ($sic['vlan_ck']) ? NULL : genericAssertion ('vlan_ck', 'uint-vlan1');
 	$net_id = createIPv4Prefix ($_REQUEST['range'], $sic['name'], isCheckSet ('is_connected'), $taglist, $vlan_ck);
 	showSuccess ('IP network ' . mkA ($_REQUEST['range'], 'ipv4net', $net_id) . ' has been created');
+	
+	$message = "Created network ". $_REQUEST['range'] . " '".$sic['name']."'";
+	$netinfo = spotEntity ('ipv4net', $net_id); 
+	addIPv4LogEntry ($netinfo['ip_bin'], $message);
 }
 
 function addIPv6Prefix ()
@@ -1054,6 +1058,10 @@ function addIPv6Prefix ()
 	$vlan_ck = empty ($sic['vlan_ck']) ? NULL : genericAssertion ('vlan_ck', 'uint-vlan1');
 	$net_id = createIPv6Prefix ($_REQUEST['range'], $sic['name'], isCheckSet ('is_connected'), $taglist, $vlan_ck);
 	showSuccess ('IP network ' . mkA ($_REQUEST['range'], 'ipv6net', $net_id) . ' has been created');
+
+	$message = "Created network ". $_REQUEST['range'] . " '".$sic['name']."'";
+	$netinfo = spotEntity ('ipv6net', $net_id);
+	addIPv6LogEntry ($netinfo['ip_bin'], $message);
 }
 
 $msgcode['delIPv4Prefix']['OK'] = 49;
@@ -1073,6 +1081,10 @@ function delIPv4Prefix ()
 	if (array_key_exists ($last_ip, $netinfo['addrlist']))
 		updateV4Address ($last_ip, '', 'no');
 	destroyIPv4Prefix ($_REQUEST['id']);
+
+	$message = "Deleted network ". $netinfo['ip'] . "/".$netinfo['mask']. " '".$netinfo['name']."'";
+	addIPv4LogEntry ($netinfo['ip_bin'], $message);
+
 	showFuncMessage (__FUNCTION__, 'OK');
 	global $pageno;
 	if ($pageno == 'ipv4net')
@@ -1093,6 +1105,10 @@ function delIPv6Prefix ()
 	if (array_key_exists ($netinfo['ip_bin'], $netinfo['addrlist']))
 		updateV6Address ($netinfo['ip_bin'], '', 'no');
 	destroyIPv6Prefix ($_REQUEST['id']);
+
+	$message = "Deleted network ". $netinfo['ip'] . "/".$netinfo['mask']. " '".$netinfo['name']."'";
+	addIPv6LogEntry ($netinfo['ip_bin'], $message);
+
 	showFuncMessage (__FUNCTION__, 'OK');
 	global $pageno;
 	if ($pageno == 'ipv6net')
@@ -2867,6 +2883,7 @@ function createVLANDomain ()
 			'vlan_descr' => 'default',
 		)
 	);
+	
 	showFuncMessage (__FUNCTION__, 'OK');
 }
 
@@ -3632,6 +3649,8 @@ function tableHandler()
 		throw new InvalidArgException ('opspec/action', $opspec['action']);
 	}
 	showOneLiner ($retcode);
+	logTableHandler($opspec); 
+
 }
 $msgcode['updateFile']['OK'] = 6;
 function updateFile ()
@@ -3756,6 +3775,30 @@ function setPatchCableAmount()
 {
 	commitSetPatchCableAmount (genericAssertion ('id', 'uint'), genericAssertion ('amount', 'uint0'));
 	showFuncMessage (__FUNCTION__, 'OK');
+}
+
+function logTableHandler($opspec) {
+
+	//logTableHandler(array('table' => "VLANDomain", 'action' => "INSERT", 'arglist' => array ( array('description' => $sic['vdom_descr']))))
+	global $remote_username;
+	if ( ($opspec['table'] == 'VLANDescription') | ($opspec['table'] == 'VLANDomain')) {
+
+		$arglist = buildOpspecColumns ($opspec, 'arglist');
+		$logentry = "";
+
+		if (($opspec['action'] == "INSERT") & ($opspec['table'] == 'VLANDescription')) {
+			$logentry = "Created VLAN ".$arglist['vlan_id']. " '" . $arglist['vlan_descr']. "'";
+		}
+		if (($opspec['action'] == "DELETE") & ($opspec['table'] == 'VLANDescription')) {
+			$logentry = "Deleted VLAN ".$arglist['vlan_id'];
+		}
+		if (($opspec['action'] == "DELETE") & ($opspec['table'] == 'VLANDomain')) {
+			$logentry = "Deleted VLAN Domain ".$arglist['vdom_id'];
+		}
+
+		$object_id = lookupEntityByString ('object', '802.1Q');
+		usePreparedExecuteBlade ('INSERT INTO ObjectLog SET object_id=?, user=?, date=NOW(), content=?', array ($object_id, $remote_username, $logentry));
+	}
 }
 
 ?>
