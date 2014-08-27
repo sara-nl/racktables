@@ -66,7 +66,12 @@ function updateTracPage($url, $tracwiki_page)
 	$request = xmlrpc_encode_request('wiki.getPage',$tracwiki_page);
 	$page = do_call($url, 443, $request);
 	$page = xmlrpc_decode($page);
-	
+	// check if there was a valid console_table tag found
+	if (strpos($page , "[=#console_table]") === false)
+    {
+        return "NO_TAG_FOUND";
+    }
+		
 	// Check if there are any changes in the administration
 	$current_console_table = substr($page,strpos($page , "[=#console_table]") + 17 , strpos($page , "[=#end_console_table]") - strpos ($page , "[=#console_table]") - 63);
 	if ($current_console_table == $tracTable) 
@@ -81,8 +86,8 @@ function updateTracPage($url, $tracwiki_page)
 	$new_page = $page_top . $tracTable . $page_bottom;
 	
 	// post new page
-	//$request = xmlrpc_encode_request('wiki.putPage', array ($tracwiki_page, $new_page, array ( "bla" => 0)));
-	//$result = do_call($url, 443, $request);
+	$request = xmlrpc_encode_request('wiki.putPage', array ($tracwiki_page, $new_page, array ( "bla" => 0)));
+	$result = do_call($url, 443, $request);
 	return "OK";
 }
 
@@ -151,11 +156,19 @@ foreach ($consoles as $console)
 	{
 		$snmphash[$console['name']] = $SNMP_Console_Info;
 	}
+	else 
+	{
+		syslog(LOG_INFO, "No info received from host: ".$console['name']);
+	}
 }
 
 updateRackTables($snmphash);
 
 $result = updateTracPage($RPC_URL, $TRAC_WIKI_PAGE);
+if ($result == "NO_TAG_OFUND")
+{
+	syslog(LOG_INFO, "No [=#console_table] tag detected, wikipage $TRAC_WIKI_PAGE not updated");
+}
 if ($result == "NO_CHANGE")
 {
 	syslog(LOG_INFO, "No changes detected, wikipage $TRAC_WIKI_PAGE not updated");
