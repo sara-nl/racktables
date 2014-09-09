@@ -165,7 +165,7 @@ foreach ($consoles as $console)
 updateRackTables($snmphash);
 
 $result = updateTracPage($RPC_URL, $TRAC_WIKI_PAGE);
-if ($result == "NO_TAG_OFUND")
+if ($result == "NO_TAG_FOUND")
 {
 	syslog(LOG_INFO, "No [=#console_table] tag detected, wikipage $TRAC_WIKI_PAGE not updated");
 }
