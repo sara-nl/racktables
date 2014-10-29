@@ -69,7 +69,7 @@ function updateTracPage($url, $tracwiki_page)
 	// check if there was a valid console_table tag found
 	if (strpos($page , "[=#console_table]") === false)
     {
-        return "NO_TAG_FOUND";
+        return "NO_TAG_FOUND,".strlen($page);
     }
 		
 	// Check if there are any changes in the administration
@@ -131,7 +131,6 @@ error_reporting(E_ALL ^ (E_NOTICE | E_WARNING));
 $script_mode = TRUE;
 include '/var/www/racktables-dev/inc/init.php';
 
-
 global $RPC_URL;   // Contains RPC user and password, is defined in secret.php
 
 // Open syslog
@@ -165,9 +164,10 @@ foreach ($consoles as $console)
 updateRackTables($snmphash);
 
 $result = updateTracPage($RPC_URL, $TRAC_WIKI_PAGE);
-if ($result == "NO_TAG_FOUND")
+if (strpos($result,"NO_TAG_FOUND") !== false)
 {
-	syslog(LOG_INFO, "No [=#console_table] tag detected, wikipage $TRAC_WIKI_PAGE not updated");
+	$data = preg_split("/,/",$result);
+	syslog(LOG_INFO, "No [=#console_table] tag detected, (page length: ". $data[1] .") wikipage $TRAC_WIKI_PAGE not updated");
 }
 if ($result == "NO_CHANGE")
 {
