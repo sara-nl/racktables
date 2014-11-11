@@ -41,7 +41,7 @@ function do_call($url, $port, $request) {
     curl_setopt($ch, CURLOPT_TIMEOUT, 1);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
-
+	curl_setopt($ch, CURLOPT_TIMEOUT,30);
     $data = curl_exec($ch);      
     if (curl_errno($ch)) {
         print curl_error($ch);
