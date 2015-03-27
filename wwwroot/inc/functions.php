@@ -993,10 +993,10 @@ function findAllEndpoints ($object_id, $fallback = '')
 	foreach (getAttrValues ($object_id) as $record)
 		if ($record['id'] == 3 && strlen ($record['value'])) // FQDN
 			return array ($record['value']);
-	$regular = array();
-	foreach (getObjectIPv4AllocationList ($object_id) as $ip_bin => $alloc)
+	$regular = array ();
+	foreach (getObjectIPAllocationList ($object_id) as $alloc)
 		if ($alloc['type'] == 'regular')
-			$regular[] = ip4_format ($ip_bin);
+			$regular[] = ip_format ($alloc['ip']);
 	// FIXME: add IPv6 allocations to this list
 	if (!count ($regular) && strlen ($fallback))
 		return array ($fallback);
@@ -1080,13 +1080,6 @@ function getRSUforRow ($rowData)
 		($counter['T'] + $counter['W'] + $counter['U'] + $counter['F']);
 }
 
-function string_insert_hrefs_callback ($m)
-{
-	$t_url_href    = 'href="' . rtrim($m[1], '.') . '"';
-	$s_url_replace = "<a ${t_url_href}>$m[1]</a> [<a ${t_url_href} target=\"_blank\">^</a>]";
-	return $s_url_replace;
-}
-
 # Detect URLs and email addresses in the string and replace them with href anchors
 # (adopted from MantisBT, core/string_api.php:string_insert_hrefs).
 function string_insert_hrefs ($p_string)
@@ -1132,7 +1125,12 @@ function string_insert_hrefs ($p_string)
 	$p_string = preg_replace_callback
 	(
 		$s_url_regex,
-		'string_insert_hrefs_callback',
+		function ($m)
+		{
+			$t_url_href    = 'href="' . rtrim($m[1], '.') . '"';
+			$s_url_replace = "<a ${t_url_href}>$m[1]</a> [<a ${t_url_href} target=\"_blank\">^</a>]";
+			return $s_url_replace;
+		},
 		$p_string
 	);
 
@@ -4549,6 +4547,14 @@ function formatLinkedPort ($port_info, $a_class = '')
 		$port_info['remote_name'],
 		$a_class
 	);
+}
+
+// return a comparison function to be used for sorting 
+// TODO: refactor to make compatible with older PHP versions
+function buildNatCmpFunction ($key) {
+	return function ($a, $b) use ($key) {
+		return strnatcmp($a[$key], $b[$key]);
+	};
 }
 
 function compareDecomposedPortNames ($porta, $portb)

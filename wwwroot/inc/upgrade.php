@@ -219,6 +219,11 @@ installation. If desired so, you could eliminate the case-duplicating rows
 and re-apply the failed query.
 ENDOFTEXT
 ,
+
+	'0.21.0' => <<<ENDOFTEXT
+The minimum (oldest) supported release of PHP is 5.3.
+ENDOFTEXT
+,
 );
 
 // At the moment we assume, that for any two releases we can
@@ -264,6 +269,8 @@ function getDBUpgradePath ($v1, $v2)
 		'0.20.6',
 		'0.20.7',
 		'0.20.8',
+		'0.20.9',
+		'0.21.0',
 	);
 	if (!in_array ($v1, $versionhistory) or !in_array ($v2, $versionhistory))
 		return NULL;
@@ -1808,6 +1815,26 @@ CREATE TABLE `PatchCableOIFCompat` (
 			// add rules for Cisco UCS objects
 			$query[] = "INSERT INTO `ObjectParentCompat` (`parent_objtype_id`, `child_objtype_id`) VALUES (1787,8),(1787,1502)";
 			$query[] = "UPDATE Config SET varvalue = '0.20.8' WHERE varname = 'DB_VERSION'";
+			break;
+		case '0.20.9':
+			$query[] = "UPDATE Config SET varvalue = '0.20.9' WHERE varname = 'DB_VERSION'";
+			break;
+		case '0.21.0':
+			// some HW types were moved from the 'Network switch' chapter to the 'Network chassis' chapter
+			// change the type of affected objects to 'Network chassis'
+			$query[] = "UPDATE `Object` SET objtype_id = 1503 WHERE id IN (SELECT object_id FROM `AttributeValue` WHERE attr_id = 2 and uint_value IN (145,146,372,373,374,375))";
+
+			// add the BNC, RJ-48C and DB-15 port types
+			$query[] = "INSERT INTO `PortOuterInterface` VALUES (13,'BNC'),(14,'T1/E1 (RJ-48C)'),(15,'RS-232 (DB-15)')";
+			$query[] = "INSERT INTO `PortInterfaceCompat` VALUES (1,13),(1,14),(1,15)";
+			$query[] = "INSERT INTO `PortCompat` VALUES (13,13),(14,14),(14,15),(15,14),(15,15)";
+
+			// add the network modules chapter, compatibility rules and attributes
+			$query[] = "INSERT INTO `Chapter` VALUES (39,'no','network module models')";
+			$query[] = "INSERT INTO `ObjectParentCompat` VALUES (7,16),(16,16),(1503,16)";
+			$query[] = "INSERT INTO `AttributeMap` (`objtype_id`,`attr_id`,`chapter_id`) VALUES (16,1,NULL),(16,2,39),(16,3,NULL),(16,5,NULL),(16,14,NULL),(16,16,NULL),(16,17,NULL),(16,18,NULL),(16,20,NULL),(16,21,NULL),(16,22,NULL),(16,24,NULL),(16,28,NULL)";
+
+			$query[] = "UPDATE Config SET varvalue = '0.21.0' WHERE varname = 'DB_VERSION'";
 			break;
 		case 'dictionary':
 			$query = reloadDictionary();
