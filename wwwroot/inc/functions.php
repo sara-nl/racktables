@@ -10,10 +10,8 @@
 *
 */
 
-// PHP messages in the following defines are suppressed because of the possibility
-// that they are already defined by user in secret.php file
-@define ('TAGNAME_REGEXP', '/^[\p{L}0-9-]( ?([._~+%-] ?)?[\p{L}0-9:])*(%|\+)?$/u');
-@define ('AUTOTAGNAME_REGEXP', '/^\$[\p{L}0-9-]( ?([._~+%-] ?)?[\p{L}0-9:])*(%|\+)?$/u');
+defineIfNotDefined ('TAGNAME_REGEXP', '/^[\p{L}0-9-]( ?([._~+%-] ?)?[\p{L}0-9:])*(%|\+)?$/u');
+defineIfNotDefined ('AUTOTAGNAME_REGEXP', '/^\$[\p{L}0-9-]( ?([._~+%-] ?)?[\p{L}0-9:])*(%|\+)?$/u');
 
 $loclist[0] = 'front';
 $loclist[1] = 'interior';
@@ -150,6 +148,12 @@ $wdm_packs = array
 );
 
 $log_messages = array(); // messages waiting for displaying
+
+function defineIfNotDefined ($constant, $value, $case_insensitive = FALSE)
+{
+	if (defined ($constant) === FALSE)
+		define ($constant, $value, $case_insensitive);
+}
 
 // This function assures that specified argument was passed
 // and is a number greater than zero.
@@ -441,7 +445,7 @@ function fillBypassValues ($pageno, &$args)
 // decision about displayed name is made.
 function formatObjectDisplayedName ($name, $objtype_id)
 {
-	return ($name != '') ? $name : sprintf ('[%s]', decodeObjectType ($objtype_id, 'o'));
+	return ($name != '') ? $name : sprintf ('[%s]', decodeObjectType ($objtype_id));
 }
 
 // Set the dname attribute within a cell
@@ -582,6 +586,15 @@ function applyObjectMountMask (&$rackData, $object_id)
 			}
 }
 
+// check permissions for rack modification
+function rackModificationPermitted ($rackData, $op, $with_context=TRUE)
+{
+	$op_annex = array (array ('tag' => '$op_'.$op), array ('tag' => '$any_op'));
+	$rack_op_annex = array_merge ($rackData['etags'], $rackData['itags'], $rackData['atags'], $op_annex);
+	$context = !$with_context || permitted (NULL, NULL, NULL, $op_annex);
+	return $context && permitted (NULL, NULL, NULL, $rack_op_annex);
+}
+
 // Design change means transition between 'F' and 'A' and back.
 function applyRackDesignMask (&$rackData)
 {
@@ -618,19 +631,20 @@ function applyRackProblemMask (&$rackData)
 function highlightObject (&$rackData, $object_id)
 {
 	// Also highlight parent objects
-	$parents = getEntityRelatives ('parents', 'object', $object_id);
-	$parent_ids = array();
-	foreach ($parents as $parent)
-		$parent_ids[] = $parent['entity_id'];
+	$object = spotEntity ('object', $object_id);
+	$parents = reindexById (getParents ($object, 'object'));
 
 	for ($unit_no = $rackData['height']; $unit_no > 0; $unit_no--)
 		for ($locidx = 0; $locidx < 3; $locidx++)
+		{
+			$atom = &$rackData[$unit_no][$locidx];
 			if
 			(
-				$rackData[$unit_no][$locidx]['state'] == 'T' and
-				($rackData[$unit_no][$locidx]['object_id'] == $object_id or	in_array($rackData[$unit_no][$locidx]['object_id'], $parent_ids))
+				$atom['state'] == 'T' and
+				($atom['object_id'] == $object_id or isset ($parents[$atom['object_id']]))
 			)
-				$rackData[$unit_no][$locidx]['hl'] = 'h';
+				$atom['hl'] = 'h';
+		}
 }
 
 // This function marks atoms to selected or not depending on their current state.
@@ -913,36 +927,51 @@ function l2addressFromDatabase ($string)
 	}
 }
 
-// The following 2 functions return previous and next rack IDs for
-// a given rack ID. The order of racks is the same as in renderRackspace()
-// or renderRow().
+// DEPRECATED, remove in 0.21.0
 function getPrevIDforRack ($row_id, $rack_id)
 {
-	$rackList = doubleLink (listCells ('rack', $row_id));
-	return array_fetch ($rackList[$rack_id], 'prev_key', NULL);
+	$n = getRackNeighbors ($row_id, $rack_id);
+	return $n['prev'];
 }
 
+// DEPRECATED, remove in 0.21.0
 function getNextIDforRack ($row_id, $rack_id)
 {
-	$rackList = doubleLink (listCells ('rack', $row_id));
-	return array_fetch ($rackList[$rack_id], 'next_key', NULL);
+	$n = getRackNeighbors ($row_id, $rack_id);
+	return $n['next'];
 }
 
-// This function finds previous and next array keys for each array key and
-// modifies its argument accordingly.
-function doubleLink ($array)
+function getRackNeighbors ($row_id, $rack_id)
 {
-	$prev_key = NULL;
-	foreach (array_keys ($array) as $key)
+	$ret = array ('prev' => NULL, 'next' => NULL);
+	$ids = selectRackOrder ($row_id);
+	$index = array_search ($rack_id, $ids);
+	if ($index !== FALSE && $index > 0)
+		$ret['prev'] = $ids[$index - 1];
+	if ($index !== FALSE && $index + 1 < count ($ids))
+		$ret['next'] = $ids[$index + 1];
+	return $ret;
+}
+
+// Return a list of rack IDs that are P or less positions
+// far from the given rack in its row.
+function getProximateRacks ($rack_id, $proximity = 0)
+{
+	$ret = array ($rack_id);
+	if ($proximity > 0)
 	{
-		if ($prev_key)
+		$rack = spotEntity ('rack', $rack_id);
+		$rackList = selectRackOrder ($rack['row_id']);
+		$cur_item = array_search ($rack_id, $rackList);
+		if (FALSE !== $cur_item)
 		{
-			$array[$key]['prev_key'] = $prev_key;
-			$array[$prev_key]['next_key'] = $key;
+			if ($todo = min ($cur_item, $proximity))
+				$ret = array_merge ($ret, array_slice ($rackList, $cur_item - $todo, $todo));
+			if ($todo = min (count ($rackList) - 1 - $cur_item, $proximity))
+				$ret = array_merge ($ret, array_slice ($rackList, $cur_item + 1, $todo));
 		}
-		$prev_key = $key;
 	}
-	return $array;
+	return $ret;
 }
 
 function sortTokenize ($a, $b)
@@ -1001,6 +1030,22 @@ function findAllEndpoints ($object_id, $fallback = '')
 	if (!count ($regular) && strlen ($fallback))
 		return array ($fallback);
 	return $regular;
+}
+
+// Split object's FQDN (or the common name if FQDN is not set) into the
+// hostname and domain name in Munin convention (using the first period as the
+// separator), and return the pair. Throw an exception on error.
+function getMuninNameAndDomain ($object_id)
+{
+	$o = spotEntity ('object', $object_id);
+	$hd = $o['name'];
+	// FQDN overrides the common name for Munin purposes.
+	$attrs = getAttrValues ($object_id);
+	if (array_key_exists (3, $attrs) && $attrs[3]['value'] != '')
+		$hd = $attrs[3]['value'];
+	if (2 != count ($ret = preg_split ('/\./', $hd, 2)))
+		throw new InvalidArgException ('$object_id', $object_id, 'the name is not in the host.do.ma.in format');
+	return $ret;
 }
 
 // Some records in the dictionary may be written as plain text or as Wiki
@@ -1454,7 +1499,7 @@ function redirectIfNecessary ()
 		$trigger,
 		$pageno,
 		$tabno;
-	@session_start();
+	startSession();
 	if
 	(
 		! isset ($_REQUEST['tab']) and
@@ -1686,13 +1731,17 @@ function shrinkSubtree ($tree, $used_tags, $preselect, $realm)
 }
 
 // Get taginfo record by tag name, return NULL, if record doesn't exist.
-function getTagByName ($target_name)
+function getTagByName ($tag_name)
 {
 	global $taglist;
-	foreach ($taglist as $taginfo)
-		if ($taginfo['tag'] == $target_name)
-			return $taginfo;
-	return NULL;
+	static $cache = NULL;
+	if (! isset ($cache))
+	{
+		$cache = array();
+		foreach ($taglist as $key => $taginfo)
+			$cache[$taginfo['tag']] = $taginfo;
+	}
+	return array_fetch($cache, $tag_name, NULL);
 }
 
 // Merge two chains, filtering dupes out. Return the resulting superset.
@@ -1732,7 +1781,7 @@ function getCellFilter ()
 	global $sic;
 	global $pageno;
 	$andor_used = FALSE;
-	@session_start();
+	startSession();
 	// if the page is submitted we get an andor value so we know they are trying to start a new filter or clearing the existing one.
 	if (isset($_REQUEST['andor']))
 		$andor_used = TRUE;
@@ -1854,22 +1903,14 @@ function getCellFilter ()
 
 function buildRedirectURL ($nextpage = NULL, $nexttab = NULL, $moreArgs = array())
 {
-	global $page, $pageno, $tabno;
-	if ($nextpage === NULL)
-		$nextpage = $pageno;
-	if ($nexttab === NULL)
-		$nexttab = $tabno;
-	$url = "index.php?page=${nextpage}&tab=${nexttab}";
-
-	if ($nextpage === $pageno)
-		fillBypassValues ($nextpage, $moreArgs);
-	foreach ($moreArgs as $arg => $value)
-		if (is_array ($value))
-			foreach ($value as $v)
-				$url .= '&' . urlencode ($arg . '[]') . '=' . urlencode ($v);
-		elseif ($arg != 'module')
-			$url .= '&' . urlencode ($arg) . '=' . urlencode ($value);
-	return $url;
+	$params = array();
+	if ($nextpage !== NULL)
+		$params['page'] = $nextpage;
+	if ($nexttab !== NULL)
+		$params['tab'] = $nexttab;
+	$params = makePageParams ($params + $moreArgs);
+	unset ($params['module']); // 'interface' module is the default
+	return makeHref ($params);
 }
 
 // store the accumulated message list into he $SESSION array to display them later
@@ -1878,8 +1919,9 @@ function backupLogMessages()
 	global $log_messages;
 	if (! empty ($log_messages))
 	{
-		@session_start();
+		startSession();
 		$_SESSION['log'] = $log_messages;
+		session_commit();
 	}
 }
 
@@ -1929,8 +1971,10 @@ function getRackImageHeight ($units)
 }
 
 // Indicate occupation state of each IP address: none, ordinary or problematic.
+// Returns number of marked up (busy) addresses
 function markupIPAddrList (&$addrlist)
 {
+	$used = 0;
 	foreach (array_keys ($addrlist) as $ip_bin)
 	{
 		$refc = array
@@ -1949,12 +1993,33 @@ function markupIPAddrList (&$addrlist)
 		}
 		$nreserved = ($addrlist[$ip_bin]['reserved'] == 'yes') ? 1 : 0; // only one reservation is possible ever
 		if ($nallocs > 1 && $nallocs != $refc['shared'] || $nallocs && $nreserved)
+		{
 			$addrlist[$ip_bin]['class'] = 'trerror';
+			++$used;
+		}
 		elseif (! isIPAddressEmpty ($addrlist[$ip_bin], array ('name', 'comment', 'inpf', 'outpf'))) // these fields don't trigger the 'busy' status
+		{
 			$addrlist[$ip_bin]['class'] = 'trbusy';
+			++$used;
+		}
 		else
 			$addrlist[$ip_bin]['class'] = '';
 	}
+	return $used;
+}
+
+function findNetRouters ($net)
+{
+	if (isset ($net['own_addrlist']))
+		$own_addrlist = $net['own_addrlist'];
+	else
+	{
+		// do not call loadIPAddrList, it is expensive.
+		// instead, do our own DB scan only for router allocations
+		$rtrlist = scanIPSpace (array (array ('first' => $net['ip_bin'], 'last' => ip_last ($net))), IPSCAN_DO_ALLOCS | IPSCAN_RTR_ONLY);
+		$own_addrlist = filterOwnAddrList ($net, $rtrlist);
+	}
+	return findRouters ($own_addrlist);
 }
 
 // Scan the given address list (returned by scanIPv4Space/scanIPv6Space) and return a list of all routers found.
@@ -2509,6 +2574,31 @@ function nodeIsCollapsed ($node)
 	return $node['symbol'] == 'node-collapsed';
 }
 
+// returns those addresses from $addrlist that do not belong to $net's subsequent networks
+function filterOwnAddrList ($net, $addrlist)
+{
+	if ($net['kidc'] == 0)
+		return $addrlist;
+
+	// net has children
+	$ret = array();
+	foreach ($net['spare_ranges'] as $mask => $spare_list)
+		foreach ($spare_list as $spare_ip)
+		{
+			$spare_mask = ip_mask ($mask, strlen ($net['ip_bin']) == 16);
+			foreach ($addrlist as $bin_ip => $addr)
+				if (($bin_ip & $spare_mask) == $spare_ip)
+					$ret[$bin_ip] = $addr;
+		}
+	return $ret;
+}
+
+function getIPAddrList ($net, $flags = IPSCAN_ANY)
+{
+	$addrlist = scanIPSpace (array (array ('first' => $net['ip_bin'], 'last' => ip_last ($net))), $flags);
+	return filterOwnAddrList ($net, $addrlist);
+}
+
 // sets 'addrlist', 'own_addrlist', 'addrc', 'own_addrc' keys of $node
 // 'addrc' and 'own_addrc' are sizes of 'addrlist' and 'own_addrlist', respectively
 function loadIPAddrList (&$node)
@@ -2518,24 +2608,8 @@ function loadIPAddrList (&$node)
 	if (! isset ($node['id']))
 		$node['own_addrlist'] = $node['addrlist'];
 	else
-	{
-		if ($node['kidc'] == 0)
-			$node['own_addrlist'] = $node['addrlist'];
-			//$node['own_addrlist'] = array();
-		else
-		{
-			$node['own_addrlist'] = array();
-			// node has childs
-			foreach ($node['spare_ranges'] as $mask => $spare_list)
-				foreach ($spare_list as $spare_ip)
-				{
-					$spare_range = constructIPRange ($spare_ip, $mask);
-					foreach ($node['addrlist'] as $bin_ip => $addr)
-						if (($bin_ip & $spare_range['mask_bin']) == $spare_range['ip_bin'])
-							$node['own_addrlist'][$bin_ip] = $addr;
-				}
-		}
-	}
+		$node['own_addrlist'] = filterOwnAddrList ($node, $node['addrlist']);
+
 	$node['addrc'] = count ($node['addrlist']);
 	$node['own_addrc'] = count ($node['own_addrlist']);
 }
@@ -2568,7 +2642,7 @@ function getIPAddress ($ip_bin)
 {
 	$scanres = scanIPSpace (array (array ('first' => $ip_bin, 'last' => $ip_bin)));
 	if (empty ($scanres))
-		return constructIPAddress ($ip_bin);
+		$scanres[$ip_bin] = constructIPAddress ($ip_bin);
 	markupIPAddrList ($scanres);
 	return $scanres[$ip_bin];
 }
@@ -2715,7 +2789,7 @@ function convertToBytes ($value)
 }
 
 // make "A" HTML element
-function mkA ($text, $nextpage, $bypass = NULL, $nexttab = NULL)
+function mkA ($text, $nextpage, $bypass = NULL, $nexttab = NULL, $attrs = array())
 {
 	global $page, $tab;
 	if ($text == '')
@@ -2735,7 +2809,11 @@ function mkA ($text, $nextpage, $bypass = NULL, $nexttab = NULL)
 			throw new InvalidArgException ('bypass', '(NULL)');
 		$args[$page[$nextpage]['bypass']] = $bypass;
 	}
-	return '<a href="' . makeHref ($args) . '">' . $text . '</a>';
+	$attrs['href'] = makeHref ($args);
+	$ret = '<a';
+	foreach ($attrs as $attr_name => $attr_value)
+		$ret .= " $attr_name=" . '"' . htmlspecialchars ($attr_value, ENT_QUOTES) . '"';
+	return $ret . '>' . $text . '</a>';
 }
 
 // make "HREF" HTML attribute
@@ -2757,27 +2835,22 @@ function makeHref ($params = array())
 	return 'index.php?' . implode ('&', $tmp);
 }
 
-function makeHrefProcess ($params = array())
+function makePageParams ($params = array())
 {
-	global $pageno, $tabno, $page;
-	$tmp = array();
-	if (! array_key_exists ('page', $params))
-		$params['page'] = $pageno;
-	if (! array_key_exists ('tab', $params))
-		$params['tab'] = $tabno;
-	if ($params['page'] === $pageno)
-		fillBypassValues ($pageno, $params);
-	foreach ($params as $key => $value)
-		$tmp[] = urlencode ($key) . '=' . urlencode ($value);
-	return '?module=redirect&' . implode ('&', $tmp);
+	global $pageno, $tabno;
+	$ret = array();
+	// assure that page and tab keys go first
+	$ret['page'] = isset ($params['page']) ? $params['page'] : $pageno;
+	$ret['tab'] = isset ($params['tab']) ? $params['tab'] : $tabno;
+	$ret += $params;
+	if ($ret['page'] === $pageno)
+		fillBypassValues ($pageno, $ret);
+	return $ret;
 }
 
-function makeHrefForHelper ($helper_name, $params = array())
+function makeHrefProcess ($params = array())
 {
-	$ret = '?module=popup&helper=' . $helper_name;
-	foreach($params as $key=>$value)
-		$ret .= '&'.urlencode($key).'='.urlencode($value);
-	return $ret;
+	return makeHref (array ('module' => 'redirect') + makePageParams ($params));
 }
 
 // Process the given list of records to build data suitable for printNiftySelect()
@@ -3061,17 +3134,13 @@ function getTagChart ($limit = 0, $realm = 'total', $special_tags = array())
 	return $ret;
 }
 
-function decodeObjectType ($objtype_id, $style = 'r')
+// $style is deprecated and unused
+function decodeObjectType ($objtype_id, $style = '')
 {
-	static $types = array();
-	if (!count ($types))
-		$types = array
-		(
-			'r' => readChapter (CHAP_OBJTYPE),
-			'a' => readChapter (CHAP_OBJTYPE, 'a'),
-			'o' => readChapter (CHAP_OBJTYPE, 'o')
-		);
-	return $types[$style][$objtype_id];
+	static $types;
+	if (! isset ($types))
+		$types = readChapter (CHAP_OBJTYPE, 'a');
+	return $types[$objtype_id];
 }
 
 function isolatedPermission ($p, $t, $cell)
@@ -3121,18 +3190,35 @@ function getPortListPrefs()
 	return $ret;
 }
 
-// Return data for printNiftySelect() with port type options. All OIF options
-// for the default IIF will be shown, but only the default OIFs will be present
-// for each other IIFs. IIFs for that there is no default OIF will not
-// be listed.
-// This SELECT will be used for the "add new port" form.
 function getNewPortTypeOptions()
 {
-	$ret = array();
-	$prefs = getPortListPrefs();
-	foreach (getPortInterfaceCompat() as $row)
+	return getUnlinkedPortTypeOptions (NULL);
+}
+
+// Return data for printNiftySelect() with port type options. All OIF options
+// for the default or current (passed) IIFs will be shown, but only the default
+// OIFs will be present for each other IIFs. IIFs for that there is no default
+// OIF will not be listed.
+// This SELECT will be used in "manage object ports" form.
+function getUnlinkedPortTypeOptions ($port_iif_id)
+{
+	static $cache;
+	static $prefs;
+	static $compat;
+	if (! isset ($cache))
 	{
-		if ($row['iif_id'] == $prefs['iif_pick'])
+		$cache = array();
+		$prefs = getPortListPrefs();
+		$compat = getPortInterfaceCompat();
+	}
+
+	if (isset ($cache[$port_iif_id]))
+		return $cache[$port_iif_id];
+
+	$ret = array();
+	foreach ($compat as $row)
+	{
+		if ($row['iif_id'] == $prefs['iif_pick'] || $row['iif_id'] == $port_iif_id)
 			$optgroup = $row['iif_name'];
 		elseif (array_key_exists ($row['iif_id'], $prefs['oif_picks']) and $prefs['oif_picks'][$row['iif_id']] == $row['oif_id'])
 			$optgroup = 'other';
@@ -3142,6 +3228,8 @@ function getNewPortTypeOptions()
 			$ret[$optgroup] = array();
 		$ret[$optgroup][$row['iif_id'] . '-' . $row['oif_id']] = $row['oif_name'];
 	}
+
+	$cache[$port_iif_id] = $ret;
 	return $ret;
 }
 
@@ -3240,6 +3328,15 @@ function formatVLANAsHyperlink ($vlaninfo)
 	return mkA (formatVLANAsRichText ($vlaninfo), 'vlan', $vlaninfo['domain_id'] . '-' . $vlaninfo['vlan_id']);
 }
 
+function formatVLANAsShortLink ($vlaninfo)
+{
+	$title = sprintf ('VLAN %d @ %s', $vlaninfo['vlan_id'], $vlaninfo['domain_descr']);
+	if ($vlaninfo['vlan_descr'] != '')
+		$title .= ' (' . $vlaninfo['vlan_descr'] . ')';
+	$attrs = array ('title' => $title);
+	return mkA ($vlaninfo['vlan_id'], 'vlan', $vlaninfo['domain_id'] . '-' . $vlaninfo['vlan_id'], NULL, $attrs);
+}
+
 function formatVLANAsRichText ($vlaninfo)
 {
 	$ret = 'VLAN' . $vlaninfo['vlan_id'];
@@ -3259,7 +3356,7 @@ function iosParseVLANString ($string)
 		$matches = array();
 		$item = trim ($item, ' ');
 		if (preg_match ('/^([[:digit:]]+)$/', $item, $matches))
-			$ret[] = $matches[1];
+			$ret[] = intval ($matches[1]);
 		elseif (preg_match ('/^([[:digit:]]+)-([[:digit:]]+)$/', $item, $matches))
 			$ret = array_merge ($ret, range ($matches[1], $matches[2]));
 		else
@@ -3832,7 +3929,7 @@ function getEmployedVlans ($object_id, $domain_vlanlist)
 				$seen_nets[$net_id] = 1;
 				$net = spotEntity ("${family}net", $net_id);
 				foreach ($net['8021q'] as $vlan)
-					if (! isset ($employed[$vlan['vlan_id']]))
+					if (isset ($domain_vlanlist[$vlan['vlan_id']]) and ! isset ($employed[$vlan['vlan_id']]))
 						$employed[$vlan['vlan_id']] = 1;
 			}
 	}
@@ -4306,18 +4403,20 @@ function recalc8021QPorts ($switch_id)
 		'ports' => 0,
 	);
 	global $dbxlink;
+	$ports = getObjectPortsAndLinks ($switch_id);
 
-	$object = spotEntity ('object', $switch_id);
-	amplifyCell ($object);
-	$vlan_config = getStored8021QConfig ($switch_id, 'desired');
-	$vswitch = getVLANSwitchInfo ($switch_id);
+	$dbxlink->beginTransaction();
+	$vswitch = getVLANSwitchInfo ($switch_id, 'FOR UPDATE');
 	if (! $vswitch)
+	{
+		$dbxlink->rollBack();
 		return $ret;
+	}
 	$domain_vlanlist = getDomainVLANList ($vswitch['domain_id']);
+	$vlan_config = getStored8021QConfig ($switch_id, 'desired');
 	$order = apply8021QOrder ($vswitch, $vlan_config);
 	$before = $order;
 
-	$dbxlink->beginTransaction();
 	// calculate remote uplinks and copy them to local downlinks
 	foreach ($order as $pn => &$local_port_order)
 	{
@@ -4325,7 +4424,7 @@ function recalc8021QPorts ($switch_id)
 			continue;
 
 		// if there is a link with remote side type 'uplink', use its vlan mask
-		if ($portinfo = findConnectedPort ($object['ports'], $pn))
+		if ($portinfo = findConnectedPort ($ports, $pn))
 		{
 			$remote_pn = $portinfo['remote_name'];
 			$remote_vlan_config = getStored8021QConfig ($portinfo['remote_object_id'], 'desired');
@@ -4371,7 +4470,7 @@ function recalc8021QPorts ($switch_id)
 			continue;
 
 		// if there is a link with remote side type 'downlink', replace its vlan mask
-		if ($portinfo = findConnectedPort ($object['ports'], $pn))
+		if ($portinfo = findConnectedPort ($ports, $pn))
 		{
 			$remote_pn = $portinfo['remote_name'];
 			$remote_vlan_config = getStored8021QConfig ($portinfo['remote_object_id'], 'desired');
@@ -4472,8 +4571,26 @@ function acceptable8021QConfig ($port)
 	}
 }
 
-function authorize8021QChangeRequests ($before, $changes)
+function nativeVlanChangePermitted ($pn, $from_vid, $to_vid, $op = NULL)
 {
+	$before = array ($pn => array (
+		'mode' => 'access',
+		'native' => $from_vid,
+		'allowed' => array ($from_vid),
+	));
+	$changes = array ($pn => array (
+		'mode' => 'access',
+		'native' => $to_vid,
+		'allowed' => array ($to_vid),
+	));
+
+	return count (authorize8021QChangeRequests ($before, $changes, $op)) != 0;
+}
+
+function authorize8021QChangeRequests ($before, $changes, $op = NULL)
+{
+	if (NULL !== $ret = callHook ('authorize8021QChangeRequests_hook', $before, $changes, $op))
+		return $ret;
 	global $script_mode;
 	if (isset ($script_mode) and $script_mode)
 		return $changes;
@@ -4481,10 +4598,10 @@ function authorize8021QChangeRequests ($before, $changes)
 	foreach ($changes as $pn => $change)
 	{
 		foreach (array_diff ($before[$pn]['allowed'], $change['allowed']) as $removed_id)
-			if (!permitted (NULL, NULL, NULL, array (array ('tag' => '$fromvlan_' . $removed_id), array ('tag' => '$vlan_' . $removed_id))))
+			if (!permitted (NULL, NULL, $op, array (array ('tag' => '$fromvlan_' . $removed_id), array ('tag' => '$vlan_' . $removed_id))))
 				continue 2; // next port
 		foreach (array_diff ($change['allowed'], $before[$pn]['allowed']) as $added_id)
-			if (!permitted (NULL, NULL, NULL, array (array ('tag' => '$tovlan_' . $added_id), array ('tag' => '$vlan_' . $added_id))))
+			if (!permitted (NULL, NULL, $op, array (array ('tag' => '$tovlan_' . $added_id), array ('tag' => '$vlan_' . $added_id))))
 				continue 2; // next port
 		$ret[$pn] = $change;
 	}
@@ -4777,10 +4894,7 @@ function searchEntitiesByText ($terms)
 				if (! isolatedPermission ($realm, 'default', spotEntity ($realm, $record['id'])))
 					unset ($summary[$realm][$key]);
 	// clear empty search result realms
-	foreach ($summary as $key => $data)
-		if (! count ($data))
-			unset ($summary[$key]);
-	return $summary;
+	return array_filter ($summary, 'count');
 }
 
 // returns URL to redirect to, or NULL if $result_type is unknown
@@ -5195,14 +5309,39 @@ function getConfigVar ($varname = '')
 }
 
 // return portinfo array if object has a port with such name, or NULL
-function getPortinfoByName (&$object, $portname)
+// in strict mode the resulting port name is always equal to the $portname.
+// in non-strict mode names are compared using shortenIfName()
+function getPortinfoByName (&$object, $portname, $strict_mode = TRUE)
 {
 	if (! isset ($object['ports']))
-		amplifyCell ($object);
+		$object['ports'] = getObjectPortsAndLinks ($object['id']);
+	if (! $strict_mode)
+	{
+		$breed = detectDeviceBreed ($object['id']);
+		$portname = shortenIfName ($portname, $breed);
+	}
+	$ret = NULL;
 	foreach ($object['ports'] as $portinfo)
-		if ($portinfo['name'] == $portname)
-			return $portinfo;
-	return NULL;
+		if ($portname == ($strict_mode ? $portinfo['name'] : shortenIfName ($portinfo['name'], $breed)))
+		{
+			$ret = $portinfo;
+			if ($ret['linked'])
+				break;
+		}
+		elseif (isset ($ret))
+			break;
+	return $ret;
+}
+
+// exclude location-related object types
+function withoutLocationTypes ($objtypes)
+{
+	global $location_obj_types;
+	$ret = array();
+	foreach ($objtypes as $k => $v)
+		if (! in_array ($k, $location_obj_types))
+			$ret[$k] = $v;
+	return $ret;
 }
 
 # For the given object ID return a getSelect-suitable list of object types
@@ -5224,7 +5363,7 @@ function getObjectTypeChangeOptions ($object_id)
 		if ($attr['value'] != '')
 			$used[] = $attr;
 	}
-	foreach (readChapter (CHAP_OBJTYPE, 'o') as $test_id => $text)
+	foreach (withoutLocationTypes (readChapter (CHAP_OBJTYPE, 'o')) as $test_id => $text)
 	{
 		foreach ($used as $attr)
 		{
@@ -5616,7 +5755,7 @@ function registerOpHandler ($page, $tab, $opname, $callback, $method = 'before')
 	elseif ($method == 'after')
 		array_push ($ophandlers_stack[$page][$tab][$opname], $callback);
 	else
-		throw new RacktablesError ("unknown ophandler injection method '$method'");
+		throw new RacktablesError ("unknown ophandler injection method '$method'", RackTablesError::INTERNAL);
 }
 
 // call this from custom ophandler registered by registerOpHandler
@@ -5670,7 +5809,7 @@ function registerTabHandler ($page, $tab, $callback, $method = 'after')
 	elseif ($method == 'replace')
 		array_push ($tabhandlers_stack[$page][$tab], '!' . $callback);
 	else
-		throw new RacktablesError ("unknown tabhandler injection method '$method'");
+		throw new RacktablesError ("unknown tabhandler injection method '$method'", RackTablesError::INTERNAL);
 }
 
 // Returns  tab content already rendered by previous tabhandlers in the chain registered by registerTabHandler.
@@ -6175,6 +6314,64 @@ function formatPatchCableHeapAsPlainText ($heap)
 	if ($heap['description'] != '')
 		$text .=  " (${heap['description']})";
 	return niftyString ($text, 512);
+}
+
+// takes a list of structures and the field name in those structures.
+// returns a two-dimentional list indexed by the value of the given field
+// the subsequent index value is taken from the index of the original $list.
+function groupBy ($list, $group_field)
+{
+	$ret = array();
+	foreach ($list as $index => $item)
+	{
+		$key = '';
+		if (isset ($item[$group_field]))
+			$key = (string) $item[$group_field];
+		$ret[$key][$index] = $item;
+	}
+	return $ret;
+}
+
+// returns the associative $array sorted by its keys
+// sort order is taken from the $order array:
+// $array[i] is arranged with $array[j] conforming to
+// numeric comparison of $order[i] and $order[j].
+function customKsort ($array, $order)
+{
+	$ret = array();
+	foreach ($array as $key => $value)
+		$ret[$key] = isset ($order[$key]) ? $order[$key] : array_last ($order) + 1;
+
+	asort ($ret, SORT_NUMERIC);
+	foreach (array_keys ($ret) as $key)
+		$ret[$key] = $array[$key];
+	return $ret;
+}
+
+// RT uses PHP sessions on demand and tries to minimize session lifetime
+// to allow concurrent operations for a single user.
+// You should call session_commit after each call of this function.
+function startSession()
+{
+	if (is_callable ('session_status'))
+	{
+		if (session_status() != PHP_SESSION_ACTIVE)
+			session_start();
+	}
+	else
+	{
+		// compatibility mode for PHP prior to 5.4.0
+		$old_errorlevel = error_reporting (E_ALL & ~E_NOTICE);
+		session_start();
+		error_reporting ($old_errorlevel);
+	}
+}
+
+// loads session data. Use if you need to only read from _SESSION.
+function startROSession()
+{
+	startSession();
+	session_commit();
 }
 
 ?>

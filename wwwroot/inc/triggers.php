@@ -122,8 +122,7 @@ function trigger_natv4 ()
 function trigger_autoports ()
 {
 	$object = spotEntity ('object', getBypassValue());
-	amplifyCell ($object);
-	if (count ($object['ports']))
+	if (count (getObjectPortsAndLinks ($object['id'])))
 		return '';
 	return count (getAutoPorts ($object['objtype_id'])) ? 'attn' : '';
 }
@@ -136,8 +135,8 @@ function trigger_tags ()
 
 function trigger_passwdchange ()
 {
-	global $user_auth_src;
-	return $user_auth_src == 'database' ? 'std' : '';
+	global $user_auth_src, $remote_username;
+	return ($user_auth_src == 'database' || 1 === getUserIDByUsername ($remote_username)) ? 'std' : '';
 }
 
 function trigger_localreports ()
@@ -161,8 +160,11 @@ function trigger_rackspace ()
 	if (in_array($object['objtype_id'], $virtual_obj_types))
 		return '';
 
-	$rackspace = getRackspaceStats();
-	if ($rackspace['Racks'] > 0) return 'std';
+	// Show tab if the object is already mounted
+	if ($object['rack_id'])
+		return 'std';
+
+	if (getEntitiesCount ('rack') > 0) return 'std';
 	return '';
 }
 
@@ -182,7 +184,7 @@ function trigger_object_8021qorder ()
 {
 	if (NULL !== getVLANSwitchInfo (getBypassValue()))
 		return 'std';
-	if (!count (getVLANDomainOptions()) or !count (getVSTOptions()))
+	if (!count (getVLANDomainOptions()) or ! getEntitiesCount ('vst'))
 		return '';
 	if (considerConfiguredConstraint (spotEntity ('object', getBypassValue()), 'VLANSWITCH_LISTSRC'))
 		return 'attn';
@@ -191,7 +193,7 @@ function trigger_object_8021qorder ()
 
 function trigger_8021q_configured ()
 {
-	if (!count (getVLANDomainOptions()) or !count (getVSTOptions()))
+	if (!count (getVLANDomainOptions()) or ! getEntitiesCount ('vst'))
 		return '';
 	return 'std';
 }

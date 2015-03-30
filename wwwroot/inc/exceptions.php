@@ -90,7 +90,7 @@ define
 // "softer" way (see below).
 class RackTablesError extends Exception
 {
-	const INTERNAL = 2;
+	const INTERNAL = 0; // the default code
 	const DB_WRITE_FAILED = 3;
 	const NOT_AUTHENTICATED = 4;
 	const MISCONFIGURED = 6;
@@ -113,6 +113,12 @@ class RackTablesError extends Exception
 		if (isset ($helpdesk_banner))
 			echo '<hr>' . $helpdesk_banner;
 		echo '</body></html>';
+	}
+	protected static function formatString ($string)
+	{
+		if (isCLIMode())
+			return $string;
+		return niftyString ($string);
 	}
 	public function dispatch()
 	{
@@ -188,9 +194,9 @@ class InvalidArgException extends RackTablesError
 	}
 	function __construct ($name, $value, $reason=NULL)
 	{
-		$message = 'Argument \'' . niftyString ($name) . '\'' .
-			' of value ' . niftyString (var_export ($value, TRUE), 200) .
-			' is invalid' . (is_null ($reason) ? '' : ' (' . niftyString ($reason, 100) . ')') .
+		$message = 'Argument \'' . self::formatString ($name) . '\'' .
+			' of value ' . self::formatString (var_export ($value, TRUE), 200) .
+			' is invalid' . (is_null ($reason) ? '' : ' (' . self::formatString ($reason, 100) . ')') .
 			'.';
 		parent::__construct ($message, parent::INTERNAL);
 		$this->name = $name;
