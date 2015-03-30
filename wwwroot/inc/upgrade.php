@@ -264,6 +264,8 @@ function getDBUpgradePath ($v1, $v2)
 		'0.20.6',
 		'0.20.7',
 		'0.20.8',
+		'0.20.9',
+		'0.20.10',
 	);
 	if (!in_array ($v1, $versionhistory) or !in_array ($v2, $versionhistory))
 		return NULL;
@@ -1809,6 +1811,30 @@ CREATE TABLE `PatchCableOIFCompat` (
 			$query[] = "INSERT INTO `ObjectParentCompat` (`parent_objtype_id`, `child_objtype_id`) VALUES (1787,8),(1787,1502)";
 			$query[] = "UPDATE Config SET varvalue = '0.20.8' WHERE varname = 'DB_VERSION'";
 			break;
+		case '0.20.9':
+			$query[] = "ALTER TABLE CactiGraph ADD KEY (server_id)";
+			$query[] = "ALTER TABLE CactiGraph DROP PRIMARY KEY";
+			$query[] = "ALTER TABLE CactiGraph ADD PRIMARY KEY (object_id, server_id, graph_id)";
+			$query[] = "ALTER TABLE CactiGraph DROP KEY `object_id`";
+			$query[] = "UPDATE Config SET description = 'List of pages to display in quick links' WHERE varname = 'QUICK_LINK_PAGES'";
+			$query[] = "INSERT INTO `Config` (varname, varvalue, vartype, emptyok, is_hidden, is_userdefined, description) VALUES ('CACTI_RRA_ID','1','uint','no','no','yes','RRA ID for Cacti graphs displayed in RackTables')";
+			$query[] = "INSERT INTO `Config` (`varname`,`varvalue`,`vartype`,`emptyok`,`is_hidden`,`is_userdefined`,`description`)
+VALUES ('SHOW_OBJECTTYPE',  'no',  'string',  'no',  'no',  'yes',  'Show object type column on depot page.')";
+
+			$query[] = "INSERT INTO PortInnerInterface (id, iif_name) VALUES (12, 'CFP2'),(13,'CPAK')";
+			$query[] = "INSERT INTO PortOuterInterface (id, oif_name) VALUES (1589, 'empty CFP2'),(1590,'empty CPAK')";
+			$query[] = "INSERT INTO PortInterfaceCompat (iif_id, oif_id) VALUES
+				(12,1589),(12,1669),(12,1670),(12,1671),(12,1672),(12,1673),(12,1674),
+				(13,1590),(13,1669),(13,1670),(13,1671),(13,1672),(13,1673),(13,1674)";
+			$query[] = "INSERT INTO PortCompat (type1, type2) VALUES (1588,1589),(1588,1590),(1589,1589),(1589,1590),(1590,1590)";
+			$query[] = "UPDATE Config SET varvalue = CONCAT(varvalue, '; 12=1589; 13=1590') WHERE varname = 'DEFAULT_PORT_OIF_IDS'";
+			$query[] = extendPortCompatQuery();
+
+			$query[] = "UPDATE Config SET varvalue = '0.20.9' WHERE varname = 'DB_VERSION'";
+			break;
+		case '0.20.10':
+			$query[] = "UPDATE Config SET varvalue = '0.20.10' WHERE varname = 'DB_VERSION'";
+			break;
 		case 'dictionary':
 			$query = reloadDictionary();
 			break;
@@ -2028,6 +2054,13 @@ else
 }
 echo '</table>';
 echo '</body></html>';
+}
+
+// returns SQL query to make PortCompat symmetric (insert missing reversed-order pairs).
+// It should be called each time after the PortCompat table pairs being added during upgrade.
+function extendPortCompatQuery()
+{
+	return "INSERT INTO PortCompat SELECT pc1.type2, pc1.type1 FROM PortCompat pc1 LEFT JOIN PortCompat pc2 ON pc1.type1 = pc2.type2 AND pc1.type2 = pc2.type1 WHERE pc2.type1 IS NULL";
 }
 
 function convertSLBTablesToBinIPs()

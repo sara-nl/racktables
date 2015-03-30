@@ -411,7 +411,7 @@ function proxyCactiRequest ($server_id, $graph_id)
 	if (! array_key_exists ($server_id, $servers))
 		throw new InvalidRequestArgException ('server_id', $server_id);
 	$cacti_url = $servers[$server_id]['base_url'];
-	$url = "${cacti_url}/graph_image.php?action=view&local_graph_id=${graph_id}&rra_id=1";
+	$url = "${cacti_url}/graph_image.php?action=view&local_graph_id=${graph_id}&rra_id=" . getConfigVar ('CACTI_RRA_ID');
 	$postvars = 'action=login&login_username=' . $servers[$server_id]['username'];
 	$postvars .= '&login_password=' . $servers[$server_id]['password'];
 
@@ -472,15 +472,21 @@ function proxyCactiRequest ($server_id, $graph_id)
 
 function proxyMuninRequest ($server_id, $graph)
 {
-	$object = spotEntity ('object', $server_id);
-	list ($host, $domain) = preg_split ("/\./", $object['dname'], 2);
+	try
+	{
+		list ($host, $domain) = getMuninNameAndDomain (getBypassValue());
+	}
+	catch (InvalidArgException $e)
+	{
+		throw new RTImageError ('munin_graph');
+	}
 
 	$ret = array();
 	$servers = getMuninServers();
 	if (! array_key_exists ($server_id, $servers))
 		throw new InvalidRequestArgException ('server_id', $server_id);
 	$munin_url = $servers[$server_id]['base_url'];
-	$url = "${munin_url}/${domain}/${object['dname']}/${graph}-day.png";
+	$url = "${munin_url}/${domain}/${host}.${domain}/${graph}-day.png";
 
 	$session = curl_init();
 

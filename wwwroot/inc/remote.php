@@ -74,6 +74,9 @@ $breedfunc = array
 	'xos12-get8021q-main'      => 'xos12Read8021QConfig',
 	'xos12-xlatepushq-main'    => 'xos12TranslatePushQueue',
 	'xos12-getallconf-main'    => 'xos12SpotConfigText',
+	'xos12-getportstatus-main' => 'xos12ReadInterfaceStatus',
+	'xos12-getmaclist-main'    => 'xos12ReadMacList',
+	'xos12-getportmaclist-main' => 'xos12ReadMacList',
 	'jun10-get8021q-main'      => 'jun10Read8021QConfig',
 	'jun10-xlatepushq-main'    => 'jun10TranslatePushQueue',
 	'jun10-getallconf-main'    => 'jun10SpotConfigText',
@@ -108,6 +111,7 @@ $breedfunc = array
 	'iosxr4-xlatepushq-main'   => 'iosxr4TranslatePushQueue',
 	'iosxr4-getallconf-main'   => 'iosxr4SpotConfigText',
 	'iosxr4-getlldpstatus-main'=> 'iosxr4ReadLLDPStatus',
+	'iosxr4-getportstatus-main'=> 'iosxr4ReadInterfaceStatus',
 	'ucs-xlatepushq-main'      => 'ucsTranslatePushQueue',
 	'ucs-getinventory-main'    => 'ucsReadInventory',
 );
@@ -219,6 +223,7 @@ function assertBreedFunction ($breed, $command)
 
 function queryDevice ($object_id, $command, $args = array())
 {
+	$ret = NULL;
 	$request = array ('opcode' => $command);
 	if (is_array ($args) && count ($args))
 	{
@@ -263,6 +268,8 @@ function queryDevice ($object_id, $command, $args = array())
 
 	if (NULL !== ($subst = callHook ('alterDeviceQueryResult', $ret, $object_id, $command)))
 		$ret = $subst;
+	if (! isset ($ret))
+		throw new RTGatewayError ("No result from $command");
 	return $ret;
 }
 
@@ -308,6 +315,18 @@ function makeGatewayParams ($object_id, $tolerate_remote_errors, /*array(&)*/$re
 			$params_from_settings['connect-timeout'] = 'connect_timeout';
 			$params_from_settings['timeout'] = 'timeout';
 			$params_from_settings['prompt-delay'] = 'prompt_delay';
+			if (isset ($settings['proto']))
+				switch ($settings['proto'])
+				{
+					case 4:
+						$params_from_settings[] = '-4';
+						break;
+					case 6:
+						$params_from_settings[] = '-6';
+						break;
+					default:
+						throw new RTGatewayError ("Proto '${settings['proto']}' is invalid. Valid protocols are: '4', '6'");
+				}
 			$params_from_settings[] = $settings['hostname'];
 			break;
 		case 'netcat':
@@ -407,14 +426,12 @@ function queryTerminal ($object_id, $commands, $tolerate_remote_errors = TRUE)
 	switch ($breed = detectDeviceBreed ($object_id))
 	{
 		case 'ios12':
+		case 'air12':
 		case 'ftos8':
 			$protocol = 'netcat'; // default is netcat mode
-			$prompt = '^(Login|[Uu]sername|Password): $|^\S+[>#]$|\[[^][]*\]\? $'; // set the prompt in case user would like to specify telnet protocol
-			$commands = "terminal length 0\nterminal no monitor\n" . $commands;
-			break;
-		case 'air12':
-			$protocol = 'telnet'; # Aironet IOS is broken
-			$prompt = '^(Username|Password): $|^\S+[>#]$';
+			if ($breed == 'air12')
+				$protocol = 'telnet'; # Aironet IOS is broken
+			$prompt = '^(Login|[Uu]sername|Password): $|^\S+[>#]$|\[[^][]*\]\? $|\?\s+\[[^][]*\]\s*$'; // set the prompt in case user would like to specify telnet protocol
 			$commands = "terminal length 0\nterminal no monitor\n" . $commands;
 			break;
 		case 'fdry5':

@@ -232,26 +232,6 @@ $opspec_list['parentmap-edit-del'] = array
 		array ('url_argname' => 'child_objtype_id', 'assertion' => 'uint'),
 	),
 );
-$opspec_list['portmap-edit-add'] = array
-(
-	'table' => 'PortCompat',
-	'action' => 'INSERT',
-	'arglist' => array
-	(
-		array ('url_argname' => 'type1', 'assertion' => 'uint'),
-		array ('url_argname' => 'type2', 'assertion' => 'uint'),
-	),
-);
-$opspec_list['portmap-edit-del'] = array
-(
-	'table' => 'PortCompat',
-	'action' => 'DELETE',
-	'arglist' => array
-	(
-		array ('url_argname' => 'type1', 'assertion' => 'uint'),
-		array ('url_argname' => 'type2', 'assertion' => 'uint'),
-	),
-);
 $opspec_list['portifcompat-edit-add'] = array
 (
 	'table' => 'PortInterfaceCompat',
@@ -849,7 +829,7 @@ function editPortForObject ()
 {
 	global $sic;
 	assertUIntArg ('port_id');
-	assertUIntArg ('port_type_id');
+	assertStringArg ('port_type_id');
 	assertStringArg ('reservation_comment', TRUE);
 	genericAssertion ('l2address', 'l2address0');
 	genericAssertion ('name', 'string');
@@ -1041,7 +1021,15 @@ function addIPv4Prefix ()
 	$taglist = genericAssertion ('taglist', 'array0');
 	global $sic;
 	$vlan_ck = empty ($sic['vlan_ck']) ? NULL : genericAssertion ('vlan_ck', 'uint-vlan1');
-	$net_id = createIPv4Prefix ($_REQUEST['range'], $sic['name'], isCheckSet ('is_connected'), $taglist, $vlan_ck);
+	$net_id = createIPv4Prefix ($_REQUEST['range'], $sic['name'], isCheckSet ('is_connected'), $taglist);
+	$net_cell = spotEntity ('ipv4net', $net_id);
+	if (isset ($vlan_ck))
+	{
+		if (considerConfiguredConstraint ($net_cell, 'VLANIPV4NET_LISTSRC'))
+			commitSupplementVLANIPv4 ($vlan_ck, $net_id);
+		else
+			showError ("VLAN binding to network " . mkCellA ($net_cell) . " is restricted in config");
+	}
 	showSuccess ('IP network ' . mkA ($_REQUEST['range'], 'ipv4net', $net_id) . ' has been created');
 	
 	$message = "Created network ". $_REQUEST['range'] . " '".$sic['name']."'";
@@ -1056,7 +1044,15 @@ function addIPv6Prefix ()
 	$taglist = genericAssertion ('taglist', 'array0');
 	global $sic;
 	$vlan_ck = empty ($sic['vlan_ck']) ? NULL : genericAssertion ('vlan_ck', 'uint-vlan1');
-	$net_id = createIPv6Prefix ($_REQUEST['range'], $sic['name'], isCheckSet ('is_connected'), $taglist, $vlan_ck);
+	$net_id = createIPv6Prefix ($_REQUEST['range'], $sic['name'], isCheckSet ('is_connected'), $taglist);
+	$net_cell = spotEntity ('ipv6net', $net_id);
+	if (isset ($vlan_ck))
+	{
+		if (considerConfiguredConstraint ($net_cell, 'VLANIPV4NET_LISTSRC'))
+			commitSupplementVLANIPv6 ($vlan_ck, $net_id);
+		else
+			showError ("VLAN binding to network " . mkCellA ($net_cell) . " is restricted in config");
+	}
 	showSuccess ('IP network ' . mkA ($_REQUEST['range'], 'ipv6net', $net_id) . ' has been created');
 
 	$message = "Created network ". $_REQUEST['range'] . " '".$sic['name']."'";
@@ -1160,10 +1156,9 @@ $msgcode['supplementAttrMap']['OK'] = 48;
 $msgcode['supplementAttrMap']['ERR1'] = 154;
 function supplementAttrMap ()
 {
-	assertUIntArg ('attr_id');
+	$attr_id = assertUIntArg ('attr_id');
 	assertUIntArg ('objtype_id');
-	$attrMap = getAttrMap();
-	if ($attrMap[$_REQUEST['attr_id']]['type'] != 'dict')
+	if (getAttrType ($attr_id) != 'dict')
 		$chapter_id = NULL;
 	else
 	{
@@ -1178,7 +1173,7 @@ function supplementAttrMap ()
 		}
 		$chapter_id = $_REQUEST['chapter_no'];
 	}
-	commitSupplementAttrMap ($_REQUEST['attr_id'], $_REQUEST['objtype_id'], $chapter_id);
+	commitSupplementAttrMap ($attr_id, $_REQUEST['objtype_id'], $chapter_id);
 	showFuncMessage (__FUNCTION__, 'OK');
 }
 
@@ -1211,14 +1206,10 @@ function updateObjectAllocation ()
 		return buildRedirectURL (NULL, NULL, $_REQUEST);
 	}
 	$object_id = getBypassValue();
+	$object = spotEntity ('object', $object_id);
 	$changecnt = 0;
-	// Get a list of all of this object's parents,
-	// then trim the list to only include parents that are racks
-	$objectParents = getEntityRelatives('parents', 'object', $object_id);
-	$parentRacks = array();
-	foreach ($objectParents as $parentData)
-		if ($parentData['entity_type'] == 'rack')
-			$parentRacks[] = $parentData['entity_id'];
+	// Get a list of rack ids which are parents of the object
+	$parentRacks = reduceSubarraysToColumn (getParents ($object, 'rack'), 'id');
 	$workingRacksData = array();
 	foreach ($_REQUEST['rackmulti'] as $cand_id)
 	{
@@ -1228,15 +1219,22 @@ function updateObjectAllocation ()
 			amplifyCell ($rackData);
 			$workingRacksData[$cand_id] = $rackData;
 		}
+		else
+			$rackData = $workingRacksData[$cand_id];
+		$is_ro = !rackModificationPermitted ($rackData, 'updateObjectAllocation', FALSE);
 		// It's zero-U mounted to this rack on the form, but not in the DB.  Mount it.
 		if (isset($_REQUEST["zerou_${cand_id}"]) && !in_array($cand_id, $parentRacks))
 		{
+			if ($is_ro)
+				continue;
 			$changecnt++;
 			commitLinkEntities ('rack', $cand_id, 'object', $object_id);
 		}
 		// It's not zero-U mounted to this rack on the form, but it is in the DB.  Unmount it.
 		if (!isset($_REQUEST["zerou_${cand_id}"]) && in_array($cand_id, $parentRacks))
 		{
+			if ($is_ro)
+				continue;
 			$changecnt++;
 			commitUnlinkEntities ('rack', $cand_id, 'object', $object_id);
 		}
@@ -1248,7 +1246,8 @@ function updateObjectAllocation ()
 	$oldMolecule = getMoleculeForObject ($object_id);
 	foreach ($workingRacksData as $rack_id => $rackData)
 	{
-		if (! processGridForm ($rackData, 'F', 'T', $object_id))
+		$is_ro = !rackModificationPermitted ($rackData, 'updateObjectAllocation', FALSE);
+		if ($is_ro || !processGridForm ($rackData, 'F', 'T', $object_id))
 			continue;
 		$changecnt++;
 		// Reload our working copy after form processing.
@@ -1452,7 +1451,7 @@ function addLotOfObjects()
 				amplifyCell ($info);
 				showSuccess ("added object " . formatPortLink ($info['id'], $info['dname'], NULL, NULL));
 			}
-			catch (RTDatabaseError $e)
+			catch (RackTablesError $e)
 			{
 				showError ("Error creating object '$name': " . $e->getMessage());
 				continue;
@@ -1623,6 +1622,7 @@ function resetUIConfig()
 	setConfigVar ('SYNC_802Q_LISTSRC', '');
 	setConfigVar ('QUICK_LINK_PAGES', 'depot,ipv4space,rackspace');
 	setConfigVar ('CACTI_LISTSRC', 'false');
+	setConfigVar ('CACTI_RRA_ID', '1');
 	setConfigVar ('MUNIN_LISTSRC', 'false');
 	setConfigVar ('VIRTUAL_OBJ_LISTSRC', '1504,1505,1506,1507');
 	setConfigVar ('DATETIME_ZONE', 'UTC');
@@ -1632,6 +1632,8 @@ function resetUIConfig()
 	setConfigVar ('8021Q_MULTILINK_LISTSRC', 'false');
 	setConfigVar ('REVERSED_RACKS_LISTSRC', 'false');
 	setConfigVar ('NEAREST_RACKS_CHECKBOX', 'yes');
+	setConfigVar ('SHOW_OBJECTTYPE', 'yes');
+
 	showFuncMessage (__FUNCTION__, 'OK');
 }
 
@@ -1898,7 +1900,7 @@ function addPortToVS()
 	$row = array ('vs_id' => $vsinfo['id'], 'proto' => $proto, 'vport' => $vport, 'vsconfig' => NULL, 'rsconfig' => NULL);
 	if ($port = isPortEnabled ($row, $vsinfo['ports']))
 	{
-		showError ("Service already contains port " . formatVSPort ($port));
+		showError ("Service already contains port " . $port['proto'] . ' ' . $port['vport']);
 		return;
 	}
 	usePreparedInsertBlade ('VSPorts', $row);
@@ -2761,6 +2763,22 @@ function addIIFOIFCompatPack ()
 	showFuncMessage (__FUNCTION__, 'OK', array ($ngood));
 }
 
+function addOIFCompat ()
+{
+	$type1 = assertUIntArg ('type1');
+	$type2 = assertUIntArg ('type2');
+	$n_changed = addPortOIFCompat ($type1, $type2);
+	showSuccess ("$n_changed row(s) added");
+}
+
+function delOIFCompat ()
+{
+	$type1 = assertUIntArg ('type1');
+	$type2 = assertUIntArg ('type2');
+	$n_changed = deletePortOIFCompat ($type1, $type2);
+	showSuccess ("$n_changed row(s) deleted");
+}
+
 $msgcode['delIIFOIFCompatPack']['OK'] = 38;
 function delIIFOIFCompatPack ()
 {
@@ -3181,8 +3199,9 @@ function updVSTRule()
 		// Every case that is soft-processed in process.php, will have the working copy available for a retry.
 		if ($e instanceof InvalidRequestArgException or $e instanceof RTDatabaseError)
 		{
-			@session_start();
+			startSession();
 			$_SESSION['vst_edited'] = $data;
+			session_commit();
 		}
 		throw $e;
 	}
@@ -3300,6 +3319,14 @@ $ucsproductmap = array
 	'UCS-FI-6248UP' => 1757, # 6248 FI
 	'UCS-FI-6296UP' => 1758, # 6296 FI
 	'N20-C6508' => 1735, # 5108 chassis
+	'UCSB-5108-AC2' => 2220, # 5108-AC2 chassis
+	'UCSB-5108-DC2' => 2221, # 5108-DC2 chassis
+	'UCSB-5108-HVDC' => 2222, # 5108-HVDC chassis
+	'UCSB-B420-M3' => 1744,   # B420 M3
+	'UCSB-B22-M3'  => 1745,   # B22 M3
+	'UCSB-B260-M4' => 2223,   # B260 M4
+	'UCSB-B460-M4' => 2224,   # B460 M4
+	'UCSB-B200-M4' => 2225,   # B200 M4
 );
 
 function autoPopulateUCS()

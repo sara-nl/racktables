@@ -304,6 +304,18 @@ ENDOFTEXT
 	return TRUE;
 }
 
+function get_process_owner()
+{
+	// this function requires the posix extention and returns the fallback value otherwise
+	if (is_callable('posix_getpwuid') and is_callable('posix_geteuid'))
+	{
+		$user = posix_getpwuid(posix_geteuid());
+		if (isset ($user['name']))
+			return $user['name'];
+	}
+	return 'nobody';
+}
+
 function check_config_access()
 {
 	global $path_to_secret_php;
@@ -312,6 +324,7 @@ function check_config_access()
 		echo 'The configuration file ownership/permissions seem to be OK.<br>';
 		return TRUE;
 	}
+	$uname = get_process_owner();
 	echo 'Please set ownership (<tt>chown</tt>) and/or permissions (<tt>chmod</tt>) ';
 	echo "of <tt>${path_to_secret_php}</tt> on the server filesystem as follows:";
 	echo '<div align=left><ul>';
@@ -320,10 +333,10 @@ function check_config_access()
 	echo '<li>The file should not be readable by anyone except the httpd process.</li>';
 	echo '<li>The file should not be writable by anyone.</li>';
 	echo '</ul></div>';
-	echo 'For example, if httpd runs as user "nobody" and group "nogroup", commands ';
+	echo 'For example, if httpd runs as user "' . $uname . '" and group "nogroup", commands ';
 	echo 'similar to the following may work (though not guaranteed to, please consider ';
 	echo 'only as an example):';
-	echo '<pre>chown nobody:nogroup secret.php; chmod 400 secret.php</pre>';
+	echo "<pre>chown $uname:nogroup secret.php; chmod 400 secret.php</pre>";
 	return FALSE;
 }
 
@@ -554,9 +567,9 @@ function get_pseudo_file ($name)
   `server_id` int(10) unsigned NOT NULL,
   `graph_id` int(10) unsigned NOT NULL,
   `caption`  char(255) DEFAULT NULL,
-  PRIMARY KEY (`server_id`,`graph_id`),
-  KEY `object_id` (`object_id`),
+  PRIMARY KEY (`object_id`,`server_id`,`graph_id`),
   KEY `graph_id` (`graph_id`),
+  KEY `server_id` (`server_id`),
   CONSTRAINT `CactiGraph-FK-server_id` FOREIGN KEY (`server_id`) REFERENCES `CactiServer` (`id`),
   CONSTRAINT `CactiGraph-FK-object_id` FOREIGN KEY (`object_id`) REFERENCES `Object` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB";
@@ -1677,7 +1690,9 @@ WHERE O.objtype_id = 1562";
 (8,'XFP'),
 (9,'SFP+'),
 (10,'QSFP+'),
-(11,'CFP')";
+(11,'CFP'),
+(12,'CFP2'),
+(13,'CPAK')";
 
 		$query[] = "INSERT INTO `PortOuterInterface` VALUES
 (16,'AC-in'),
@@ -1866,6 +1881,8 @@ WHERE O.objtype_id = 1562";
 (1466,'10GBase-ER-DWDM40-28.77 (ITU 61)'),
 (1469,'virtual port'),
 (1588,'empty QSFP+'),
+(1589,'empty CFP2'),
+(1590,'empty CPAK'),
 (1603,'1000Base-T (HP c-Class)'),
 (1604,'100Base-TX (HP c-Class)'),
 (1642,'10GBase-T'),
@@ -1948,6 +1965,8 @@ WHERE O.objtype_id = 1562";
 (9,1084),(9,30),(9,35),(9,36),(9,37),(9,38),(9,39),(9,40),
 (10,1588),(10,1660),(10,1662),(10,1663),(10,1664),
 (11,1668),(11,1669),(11,1670),(11,1671),(11,1672),(11,1673),(11,1674),
+(12,1589),(12,1669),(12,1670),(12,1671),(12,1672),(12,1673),(12,1674),
+(13,1590),(13,1669),(13,1670),(13,1671),(13,1672),(13,1673),(13,1674),
 (1,16),(1,19),(1,24),(1,29),(1,31),(1,33),(1,446),(1,681),(1,682),(1,1322),(1,1399),(1,1469)";
 
 		$query[] = "INSERT INTO `PortCompat` (`type1`, `type2`) VALUES
@@ -1956,15 +1975,11 @@ WHERE O.objtype_id = 1562";
 (19,19),
 (24,24),
 (18,19),
-(19,18),
 (18,24),
-(24,18),
 (19,24),
-(24,19),
 (29,29),
 (30,30),
 (16,1322),
-(1322,16),
 (29,681),
 (29,682),
 (32,32),
@@ -1979,12 +1994,8 @@ WHERE O.objtype_id = 1562";
 (41,41),
 (42,42),
 (439,439),
-(446,33),
-(681,29),
 (681,681),
 (681,682),
-(682,29),
-(682,681),
 (682,682),
 (1077,1077),
 (1084,1084),
@@ -1993,7 +2004,6 @@ WHERE O.objtype_id = 1562";
 (1196,1196),
 (1197,1197),
 (1198,1199),
-(1199,1198),
 (1200,1200),
 (1201,1201),
 (1202,1202),
@@ -2001,7 +2011,6 @@ WHERE O.objtype_id = 1562";
 (1204,1204),
 (1205,1205),
 (1206,1207),
-(1207,1206),
 (1209,1209),
 (1210,1210),
 (1211,1211),
@@ -2141,6 +2150,11 @@ WHERE O.objtype_id = 1562";
 (1469,1469),
 (1399,1399),
 (1588,1588),
+(1588,1589),
+(1588,1590),
+(1589,1589),
+(1589,1590),
+(1590,1590),
 (1603,1603),
 (1660,1660),
 (1661,1661),
@@ -2156,6 +2170,9 @@ WHERE O.objtype_id = 1562";
 (1674,1674),
 (1642,1642),
 (1999,1999)";
+
+		// make PortCompat symmetric (insert missing reversed-order pairs)
+		$query[] = "INSERT INTO PortCompat SELECT pc1.type2, pc1.type1 FROM PortCompat pc1 LEFT JOIN PortCompat pc2 ON pc1.type1 = pc2.type2 AND pc1.type2 = pc2.type1 WHERE pc2.type1 IS NULL";
 
 		$query[] = "INSERT INTO `Config` (varname, varvalue, vartype, emptyok, is_hidden, is_userdefined, description) VALUES
 ('MASSCOUNT','8','uint','no','no','yes','&quot;Fast&quot; form is this many records tall'),
@@ -2229,8 +2246,9 @@ WHERE O.objtype_id = 1562";
 ('FILTER_RACKLIST_BY_TAGS','yes','string','yes','no','yes','Rackspace: show only racks matching the current object\'s tags'),
 ('MGMT_PROTOS','ssh: {\$typeid_4}; telnet: {\$typeid_8}','string','yes','no','yes','Mapping of management protocol to devices'),
 ('SYNC_802Q_LISTSRC','','string','yes','no','no','List of VLAN switches sync is enabled on'),
-('QUICK_LINK_PAGES','depot,ipv4space,rackspace','string','yes','no','yes','List of pages to dislay in quick links'),
+('QUICK_LINK_PAGES','depot,ipv4space,rackspace','string','yes','no','yes','List of pages to display in quick links'),
 ('CACTI_LISTSRC','false','string','yes','no','no','List of object with Cacti graphs'),
+('CACTI_RRA_ID','1','uint','no','no','yes','RRA ID for Cacti graphs displayed in RackTables'),
 ('MUNIN_LISTSRC','false','string','yes','no','no','List of object with Munin graphs'),
 ('VIRTUAL_OBJ_LISTSRC','1504,1505,1506,1507','string','no','no','no','List source: virtual objects'),
 ('DATETIME_ZONE','UTC','string','yes','no','yes','Timezone to use for displaying/calculating dates'),
@@ -2240,6 +2258,7 @@ WHERE O.objtype_id = 1562";
 ('8021Q_MULTILINK_LISTSRC','false','string','yes','no','no','List source: IPv4/IPv6 networks allowing multiple VLANs from same domain'),
 ('REVERSED_RACKS_LISTSRC', 'false', 'string', 'yes', 'no', 'no', 'List of racks with reversed (top to bottom) units order'),
 ('NEAREST_RACKS_CHECKBOX', 'yes', 'string', 'yes', 'no', 'yes', 'Enable nearest racks in port list filter by default'),
+('SHOW_OBJECTTYPE', 'yes', 'string', 'no', 'no', 'yes', 'Show object type column on depot page'),
 ('DB_VERSION','${db_version}','string','no','yes','no','Database version.')";
 
 		$query[] = "INSERT INTO `Script` VALUES ('RackCode','allow {\$userid_1}')";
