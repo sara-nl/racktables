@@ -144,20 +144,38 @@ $result = usePreparedSelectBlade ("select Object.id, Object.name ,AttributeValue
 									LEFT JOIN Attribute ON AttributeValue.attr_id=Attribute.id
 									where Dictionary.dict_value=\"serial console server\"  and Attribute.name=\"SNMP Community\";");
 while ($row = $result->fetch (PDO::FETCH_ASSOC)) {
-	$consoles[]=$row;
+	$consoles[$row['id']]=$row;
+}
+// second run to fetch FQDN
+$result = usePreparedSelectBlade ("select Object.id, Object.name ,AttributeValue.string_value as FQDN from Object 
+                                    LEFT JOIN AttributeValue ON AttributeValue.object_id = Object.id 
+                                    LEFT JOIN Dictionary ON Object.objtype_id = Dictionary.dict_key 
+                                    LEFT JOIN Attribute ON AttributeValue.attr_id=Attribute.id
+                                    where Dictionary.dict_value=\"serial console server\"  and Attribute.name=\"FQDN\";");
+while ($row = $result->fetch (PDO::FETCH_ASSOC)) {
+	$consoles[$row['id']]['FQDN']=$row['FQDN'];
 }
 
 // Retrieve port info for all consoles using SNMP
+
 foreach ($consoles as $console)
 {
-	$SNMP_Console_Info = getSNMP_Console_Info($console['name'], $console['community']);
-	if (count($SNMP_Console_Info) > 0)
-	{
-		$snmphash[$console['name']] = $SNMP_Console_Info;
+	if (strlen($console['FQDN']) == 0) {
+		syslog(LOG_INFO, "No FQDN found for object: ".$console['name']);
 	}
-	else 
-	{
-		syslog(LOG_INFO, "No info received from host: ".$console['name']);
+    if (strlen($console['community']) == 0) {
+        syslog(LOG_INFO, "No SNMP community found for object: ".$console['name']);
+    }
+
+	if ((strlen($console['FQDN']) == 0) & (strlen($console['community']) == 0)) {
+
+		$SNMP_Console_Info = getSNMP_Console_Info($console['FQDN'], $console['community']);
+		if (count($SNMP_Console_Info) > 0) {
+			$snmphash[$console['FQDN']] = $SNMP_Console_Info;
+		}
+		else {
+		syslog(LOG_INFO, "No info received from host: ".$console['FQDN']);
+		}
 	}
 }
 
