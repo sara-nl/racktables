@@ -54,6 +54,15 @@ function renderCustomReport()
 
         if ( isset( $_POST['location'] ) )
             array_push($aCSVRow, "Location");
+        
+        if ( isset( $_POST['rack_id'] ) )
+            array_push($aCSVRow, "rack_id");
+        
+        if ( isset( $_POST['row_id'] ) )
+            array_push($aCSVRow, "row_id");
+
+        if ( isset( $_POST['rackunits'] ) )
+            array_push($aCSVRow, "rackunits");
 
         if ( isset( $_POST['MACs'] ) )
             array_push($aCSVRow, "MACs");
@@ -107,6 +116,15 @@ function renderCustomReport()
 
             if ( isset( $_POST['location'] ) )
                 array_push($aCSVRow, preg_replace('/<a[^>]*>(.*)<\/a>/iU', '$1', getLocation($Result)));
+
+            if ( isset( $_POST['rack_id'] ) )
+                array_push($aCSVRow, getRack($Result));
+
+            if ( isset( $_POST['row_id'] ) )
+                array_push($aCSVRow, getRow($Result));
+
+            if ( isset( $_POST['rackunits'] ) )
+                array_push($aCSVRow, getRackunits($Result));
 
             if ( isset( $_POST['MACs'] ) ) {
                 $sTemp = '';
@@ -262,6 +280,9 @@ function renderCustomReport()
              <tr><td><input type="checkbox" name="type" value="1" ';if (isset($_POST['type'])) echo ' checked="checked"'; echo '> Type</td></tr>
              <tr class="odd"><td><input type="checkbox" name="asset_no" value="1" ';if (isset($_POST['asset_no'])) echo ' checked="checked"'; echo '> Asset Tag</td></tr>
              <tr><td><input type="checkbox" name="location" value="1" ';if (isset($_POST['location'])) echo ' checked="checked"'; echo '> Location</td></tr>
+             <tr><td><input type="checkbox" name="rack_id" value="1" ';if (isset($_POST['rack_id'])) echo ' checked="checked"'; echo '> Rack</td></tr>
+             <tr><td><input type="checkbox" name="row_id" value="1" ';if (isset($_POST['row_id'])) echo ' checked="checked"'; echo '> Row</td></tr>
+             <tr><td><input type="checkbox" name="rackunits" value="1" ';if (isset($_POST['rackunits'])) echo ' checked="checked"'; echo '> Rackunits</td></tr>    
              <tr class="odd"><td><input type="checkbox" name="has_problems" value="1" ';if (isset($_POST['has_problems'])) echo ' checked="checked"'; echo '> Has Problems</td></tr>
              <tr><td><input type="checkbox" name="comment" value="1" ';if (isset($_POST['comment'])) echo ' checked="checked"'; echo '> Comment</td></tr>
              <tr class="odd"><td><input type="checkbox" name="runs8021Q" value="1" ';if (isset($_POST['runs8021Q'])) echo ' checked="checked"'; echo '> Runs 8021Q</td></tr>
@@ -380,6 +401,15 @@ function renderCustomReport()
 
         if ( isset( $_POST['location'] ) )
             echo '<th>Location</th>';
+        
+        if ( isset( $_POST['rack_id'] ) )
+            echo '<th>Rack</th>';
+
+        if ( isset( $_POST['row_id'] ) )
+            echo '<th>Row</th>';
+
+        if ( isset( $_POST['rackunits'] ) )
+            echo '<th>Rackunits</th>';
 
         if ( isset( $_POST['MACs'] ) )
             echo '<th>MACs</th>';
@@ -484,6 +514,24 @@ function renderCustomReport()
             if ( isset( $_POST['location'] ) ) {
                 echo '<td>';
                 echo getLocation($Result);
+                echo '</td>';
+            }
+
+            if ( isset( $_POST['rack_id'] ) ) {
+                echo '<td>';
+                echo getRack($Result);
+                echo '</td>';
+            }
+
+            if ( isset( $_POST['row_id'] ) ) {
+                echo '<td>';
+                echo getRow($Result);
+                echo '</td>';
+            }
+
+            if ( isset( $_POST['rackunits'] ) ) {
+                echo '<td>';
+                echo getRackunits($Result);
                 echo '</td>';
             }
 
@@ -635,7 +683,7 @@ function getResult ( $post ) {
     }
 
     $aResult = scanRealmByText ( 'object', $sFilter );
-
+    
     // Add tags
     $aTemp = array();
     foreach ( $aResult as $Result) {
