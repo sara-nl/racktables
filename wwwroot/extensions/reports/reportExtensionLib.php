@@ -70,7 +70,90 @@ function getLocation($aObject) {
 
 }
 
- /**
+function getRack($aObject) {
+    $sRackName = 'unknown';
+
+    # Try to read the mount informations of the object
+    if ( function_exists('getMountInfo') ) {
+        $mountInfo = getMountInfo (array($aObject['id']));
+
+        if ( isset( $mountInfo[$aObject['id']][0]["rack_name"] ) )
+            $sRackName = $mountInfo[$aObject['id']][0]["rack_name"];
+    }
+    else {
+        if ( isset( $aObject["Rack_name"] ) )
+            $sRackName = $aObject["Rack_name"];
+    }
+
+    # No mount information available - check for a container
+    if (( $sRackName == 'unknown' ) && ( isset( $aObject['container_id'] ) ) ) {
+   
+        # Get mount info of the container
+        $sContainerRackName = 'unknown';
+
+        if ( function_exists('getMountInfo') ) {
+
+            $containerMountInfo = getMountInfo (array($aObject['container_id']));
+
+            if ( isset( $containerMountInfo[$aObject['container_id']][0]["rack_name"] ) )
+                $sContainerRackName = $containerMountInfo[$aObject['container_id']][0]["rack_name"];
+        }
+    }
+    if ($sRackName == 'unknown') return $sContainerRackName;
+    else return $sRackName;
+}
+
+function getRow($aObject) {
+    $sRowName = 'unknown';
+
+    # Try to read the mount informations of the object
+    if ( function_exists('getMountInfo') ) {
+        $mountInfo = getMountInfo (array($aObject['id']));
+
+        if ( isset( $mountInfo[$aObject['id']][0]["row_name"] ) )
+            $sRowName = $mountInfo[$aObject['id']][0]["row_name"];
+    }
+    else {
+        if ( isset( $aObject["Row_name"] ) )
+            $sRowName = $aObject["Row_name"];
+    }
+
+    # No mount information available - check for a container
+    if ( ( $sRowName == 'unknown' ) && ( isset( $aObject['container_id'] ) ) ) {
+    
+        # Get mount info of the container
+        $sContainerRowName = 'unknown';
+
+        if ( function_exists('getMountInfo') ) {
+
+            $containerMountInfo = getMountInfo (array($aObject['container_id']));
+
+            if ( isset( $containerMountInfo[$aObject['container_id']][0]["row_name"] ) )
+            $sContainerRowName = $containerMountInfo[$aObject['container_id']][0]["row_name"];
+
+        }
+    }
+
+    if ($sRowName == 'unknown') return $sContainerRowName;
+    else return $sRowName;
+}
+
+function getRackunits($aObject) {
+    if ( function_exists('getMoleculeForObject') ) {
+      $rackdata = getMoleculeForObject($aObject['id']);
+      foreach ($rackdata as $unit) {
+        $units[] = intval($unit["unit_no"]);
+      }
+      $units = array_unique($units);
+      sort($units);
+      $returnString = implode(",",$units); 
+      unset($units); 
+    }
+    return $returnString;
+}
+
+        
+/**
   * Create hyperlinks in text
   *
   * @param string $sText
