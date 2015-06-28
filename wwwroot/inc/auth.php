@@ -1,5 +1,4 @@
 <?php
-
 # This file is a part of RackTables, a datacenter and server room management
 # framework. See accompanying file "COPYING" for the full copyright and
 # licensing information.
@@ -468,7 +467,6 @@ function authenticated_via_ldap_cache ($username, $password, &$ldap_displayname)
 function queryLDAPServer ($username, $password)
 {
 	global $LDAP_options;
-
 	if(extension_loaded('ldap') === FALSE)
 		throw new RackTablesError ('LDAP misconfiguration. LDAP PHP Module is not installed.', RackTablesError::MISCONFIGURED);
 
@@ -560,17 +558,20 @@ function queryLDAPServer ($username, $password)
 					RackTablesError::MISCONFIGURED
 				);
 		}
-		$results = @ldap_search ($connect, $LDAP_options['search_dn'], '(' . $LDAP_options['search_attr'] . "=${username})", array("dn"));
+		$results = @ldap_search ($connect, $LDAP_options['search_dn'], "(|(". $LDAP_options['search_attr'] ."=${username})(memberuid=${username}))", array("dn"));
 		if ($results === FALSE)
 			return array ('result' => 'CAN');
-		if (@ldap_count_entries ($connect, $results) != 1)
+		if (@ldap_count_entries ($connect, $results) < 1)
 		{
 			@ldap_close ($connect);
 			return array ('result' => 'NAK');
 		}
 		$info = @ldap_get_entries ($connect, $results);
 		ldap_free_result ($results);
-		$auth_user_name = $info[0]['dn'];
+		
+		foreach($info as $entry)
+			if( preg_match("/^uid/", $entry["dn"]) )
+				$auth_user_name = $entry['dn'];
 	}
 	else
 		throw new RackTablesError ('LDAP misconfiguration. Cannon build username for authentication.', RackTablesError::MISCONFIGURED);
@@ -601,10 +602,11 @@ function queryLDAPServer ($username, $password)
 		(
 			$connect,
 			$LDAP_options['search_dn'],
-			'(' . $LDAP_options['search_attr'] . "=${username})",
-			array_merge (array ($LDAP_options['group_attr']), explode (' ', $LDAP_options['displayname_attrs']))
+			'(|(' . $LDAP_options['search_attr'] . "=${username})(memberuid=${username}))",			
+			array_merge (array ($LDAP_options['group_attr']),explode (' ', $LDAP_options['displayname_attrs']))
 		);
-		if (@ldap_count_entries ($connect, $results) != 1)
+		
+		if (@ldap_count_entries ($connect, $results) < 1)
 		{
 			@ldap_close ($connect);
 			return array ('result' => 'NAK');
@@ -613,20 +615,25 @@ function queryLDAPServer ($username, $password)
 		ldap_free_result ($results);
 		$space = '';
 		foreach (explode (' ', $LDAP_options['displayname_attrs']) as $attr)
-			if (isset ($info[0][$attr]))
+			foreach ($info as $entry)
 			{
-				$ret['displayed_name'] .= $space . $info[0][$attr][0];
-				$space = ' ';
-			}
+				if (isset ($entry[$attr]))
+				{
+					$ret['displayed_name'] .= $space . $entry[$attr][0];
+					$space = ' ';
+				}
+		}	
+		
 		// Pull group membership, if any was returned.
-		if (isset ($info[0][$LDAP_options['group_attr']]))
-			for ($i = 0; $i < $info[0][$LDAP_options['group_attr']]['count']; $i++)
-				if
-				(
-					preg_match ($LDAP_options['group_filter'], $info[0][$LDAP_options['group_attr']][$i], $matches)
+        foreach($info as $entry)
+		{
+			if (isset ($entry[$LDAP_options['group_attr']]))
+				if (
+					preg_match ($LDAP_options['group_filter'], $entry['dn'], $matches)
 					and validTagName ('$lgcn_' . $matches[1], TRUE)
 				)
 					$ret['memberof'][] = '$lgcn_' . $matches[1];
+		}
 	}
 	@ldap_close ($connect);
 	return $ret;
