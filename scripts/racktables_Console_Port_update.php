@@ -4,12 +4,10 @@ $TRAC_WIKI_PAGE = 'Console_servers';
 
 // Gets port info from a console server
 function getSNMP_Console_Info ($host, $SNMP_community) {
-	
 	snmp_set_valueretrieval(SNMP_VALUE_PLAIN);
 	//  Avocent
 	$brand = "avocent";
 	$data = snmprealwalk($host, $SNMP_community, ".1.3.6.1.4.1.2925.4.2.6.2.1.1.3");
-	 
 	// Cyclades
 	if (empty($data)) 
 	{
@@ -65,7 +63,9 @@ function updateTracPage($url, $tracwiki_page)
 	//Get current version of the Console_servers page from TracWiki
 	$request = xmlrpc_encode_request('wiki.getPage',$tracwiki_page);
 	$page = do_call($url, 443, $request);
+	
 	$page = xmlrpc_decode($page);
+
 	// check if there was a valid console_table tag found
 	if (strpos($page , "[=#console_table]") === false)
     {
@@ -88,6 +88,7 @@ function updateTracPage($url, $tracwiki_page)
 	// post new page
 	$request = xmlrpc_encode_request('wiki.putPage', array ($tracwiki_page, $new_page, array ( "bla" => 0)));
 	$result = do_call($url, 443, $request);
+	print $result;
 	return "OK";
 }
 
@@ -95,13 +96,18 @@ function updateRackTables($snmphash)
 {
 	foreach ($snmphash as $console_server => $portdata) 
 	{
-		// read the complete list of ports from the Racktablesdatabase
-		$result = usePreparedSelectBlade ("select Object.id as object_id, Port.* from Object INNER JOIN Port ON Port.object_id = Object.id where Object.objtype_id=1644 and Object.name='".$console_server."';");
-		while ($row = $result->fetch (PDO::FETCH_ASSOC)) 
-		{
-			$ports[$console_server][$row['name']] = $row;
-		}
-		$object_id = lookupEntityByString ('object', $console_server);
+
+		$result2 = usePreparedSelectBlade ("select o.id,o.name from Object o INNER JOIN AttributeValue a ON o.id = a.object_id where o.objtype_id=1644 and a.attr_id=3 and a.string_value='".$console_server."';");
+		$row = $result2->fetch (PDO::FETCH_ASSOC);
+		$object_id = $row['id'];
+		$object_name = $row['name'];
+
+        // read the complete list of ports from the Racktablesdatabase
+        $result = usePreparedSelectBlade ("select Object.id as object_id, Port.* from Object INNER JOIN Port ON Port.object_id = Object.id where Object.objtype_id=1644 and Object.name='".$object_name."';");
+        while ($row = $result->fetch (PDO::FETCH_ASSOC))
+        {
+            $ports[$console_server][$row['name']] = $row;
+        }
 
 		// Loop through ports array and add db data to snmp table
 		foreach ($ports[$console_server] as $dbport) 
@@ -110,6 +116,7 @@ function updateRackTables($snmphash)
 		}
 
 		// Loop through SNMP data and matches changes between db and SNMP
+		//var_dump($portdata);
 		foreach ($portdata as $port => $label) 
 		{	
 			if (!array_key_exists('db',$label))
@@ -118,6 +125,7 @@ function updateRackTables($snmphash)
 			}
 			else if ($label['snmp'] !== $label['db']) 
 			{
+				echo $label['snmp']." ".$label['db'];
 				commitUpdatePort ($ports[$console_server][$port]['object_id'], $ports[$console_server][$port]['id'], $port, 24, $label['snmp'], "", "");
 			} 
 		}
@@ -157,7 +165,6 @@ while ($row = $result->fetch (PDO::FETCH_ASSOC)) {
 }
 
 // Retrieve port info for all consoles using SNMP
-
 foreach ($consoles as $console)
 {
 	if (strlen($console['FQDN']) == 0) {
@@ -167,18 +174,17 @@ foreach ($consoles as $console)
         syslog(LOG_INFO, "No SNMP community found for object: ".$console['name']);
     }
 
-	if ((strlen($console['FQDN']) == 0) & (strlen($console['community']) == 0)) {
+	if ((strlen($console['FQDN']) != 0) & (strlen($console['community']) != 0)) {
 
 		$SNMP_Console_Info = getSNMP_Console_Info($console['FQDN'], $console['community']);
 		if (count($SNMP_Console_Info) > 0) {
 			$snmphash[$console['FQDN']] = $SNMP_Console_Info;
 		}
 		else {
-		syslog(LOG_INFO, "No info received from host: ".$console['FQDN']);
+			syslog(LOG_INFO, "No info received from host: ".$console['FQDN']);
 		}
 	}
 }
-
 updateRackTables($snmphash);
 
 $result = updateTracPage($RPC_URL, $TRAC_WIKI_PAGE);
