@@ -87,6 +87,8 @@ function renderCustomReport()
         if ( isset( $_POST['Childs'] ) )
             array_push($aCSVRow, "Child objects");
 
+        if ( isset( $_POST['id'] ) )
+            array_push($aCSVRow, "ID");
         fputcsv( $outstream, $aCSVRow );
 
         /* Create data rows */
@@ -217,6 +219,9 @@ function renderCustomReport()
             	 
             	array_push($aCSVRow, $sTemp);
             }
+		
+			if ( isset( $_POST['id'] ) )
+                array_push($aCSVRow, getID($Result));
 
             fputcsv( $outstream, $aCSVRow );
         }
@@ -292,6 +297,7 @@ function renderCustomReport()
              <tr class="odd"><td><input type="checkbox" name="Ports" value="1" ';if (isset($_POST['Ports'])) echo ' checked="checked"'; echo '> Ports</td></tr>
              <tr><td><input type="checkbox" name="Containers" value="1" ';if (isset($_POST['Containers'])) echo ' checked="checked"'; echo '> Containers</td></tr>
              <tr class="odd"><td><input type="checkbox" name="Childs" value="1" ';if (isset($_POST['Childs'])) echo ' checked="checked"'; echo '> Child objects</td></tr>
+             <tr class="odd"><td><input type="checkbox" name="id" value="1" ';if (isset($_POST['id'])) echo ' checked="checked"'; echo '> Object ID</td></tr>
            </table>
          </td>';
 
@@ -436,6 +442,10 @@ function renderCustomReport()
         
         if ( isset( $_POST['Childs'] ) ) {
         	echo '<th>Child objects</th>';
+        }
+
+        if ( isset( $_POST['id'] ) ) {
+            echo '<th>Object ID</th>';
         }
 
         echo '  </tr>
@@ -627,6 +637,12 @@ function renderCustomReport()
             	}
             
             	echo '</td>';
+            }
+
+            if ( isset( $_POST['id'] ) ) {
+                echo '<td>';
+                echo getID($Result);
+                echo '</td>';
             }
 
             echo '</tr>';

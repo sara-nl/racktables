@@ -152,6 +152,9 @@ function getRackunits($aObject) {
     return $returnString;
 }
 
+function getID($aObject) {
+	return $aObject['id'];
+}
         
 /**
   * Create hyperlinks in text
