@@ -4,6 +4,7 @@ $TRAC_WIKI_PAGE = 'Console_servers';
 
 // Gets port info from a console server
 function getSNMP_Console_Info ($host, $SNMP_community) {
+	
 	snmp_set_valueretrieval(SNMP_VALUE_PLAIN);
 	//  Avocent
 	$brand = "avocent";
@@ -65,7 +66,7 @@ function updateTracPage($url, $tracwiki_page)
 	$page = do_call($url, 443, $request);
 	
 	$page = xmlrpc_decode($page);
-
+	
 	// check if there was a valid console_table tag found
 	if (strpos($page , "[=#console_table]") === false)
     {
@@ -137,7 +138,7 @@ function updateRackTables($snmphash)
 // Call neccesary Racktables parameters and libraries
 error_reporting(E_ALL ^ (E_NOTICE | E_WARNING));
 $script_mode = TRUE;
-include '/var/www/racktables-dev/inc/init.php';
+include dirname(__FILE__).'/../wwwroot/inc/init.php';
 
 global $RPC_URL;   // Contains RPC user and password, is defined in secret.php
 

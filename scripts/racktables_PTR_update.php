@@ -22,7 +22,7 @@
 // Call neccesary Racktables parameters and libraries
 error_reporting(E_ALL ^ (E_NOTICE | E_WARNING));
 $script_mode = TRUE;
-include '/var/www/racktables/inc/init.php';
+include dirname(__FILE__).'/../wwwroot/inc/init.php';
 
 // Open syslog
 openlog('PTR_check', LOG_PID | LOG_ODELAY,LOG_LOCAL7);
