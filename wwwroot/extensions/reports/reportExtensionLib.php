@@ -155,6 +155,17 @@ function getRackunits($aObject) {
 function getID($aObject) {
 	return $aObject['id'];
 }
+
+function getMountInfoSummary($aObject) {
+        $data = getMoleculeForObject($aObject['id']);
+        $front = ""; $interior=""; $rear="";
+        foreach ($data as $mount_info) {
+               if ($mount_info['atom'] == "front") $front = "f";
+               if ($mount_info['atom'] == "interior") $interior = "i";
+               if ($mount_info['atom'] == "rear") $rear = "r";
+        }
+        return $front.$interior.$rear;
+}
         
 /**
   * Create hyperlinks in text

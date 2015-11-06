@@ -89,7 +89,12 @@ function renderCustomReport()
 
         if ( isset( $_POST['id'] ) )
             array_push($aCSVRow, "ID");
+
+        if ( isset( $_POST['mount_info'] ) )
+            array_push($aCSVRow, "Mount Info");
+
         fputcsv( $outstream, $aCSVRow );
+
 
         /* Create data rows */
         foreach ( $aResult as $Result ) {
@@ -220,8 +225,14 @@ function renderCustomReport()
             	array_push($aCSVRow, $sTemp);
             }
 		
-			if ( isset( $_POST['id'] ) )
+	    if ( isset( $_POST['id'] ) )
                 array_push($aCSVRow, getID($Result));
+
+	    if ( isset( $_POST['mount_info'] ) ) {
+		$sTemp = '';
+		$sTemp = "bla";
+		array_push($aCSVRow, getMountInfoSummary($Result));	
+	    }
 
             fputcsv( $outstream, $aCSVRow );
         }
@@ -297,8 +308,9 @@ function renderCustomReport()
              <tr class="odd"><td><input type="checkbox" name="Ports" value="1" ';if (isset($_POST['Ports'])) echo ' checked="checked"'; echo '> Ports</td></tr>
              <tr><td><input type="checkbox" name="Containers" value="1" ';if (isset($_POST['Containers'])) echo ' checked="checked"'; echo '> Containers</td></tr>
              <tr class="odd"><td><input type="checkbox" name="Childs" value="1" ';if (isset($_POST['Childs'])) echo ' checked="checked"'; echo '> Child objects</td></tr>
-             <tr class="odd"><td><input type="checkbox" name="id" value="1" ';if (isset($_POST['id'])) echo ' checked="checked"'; echo '> Object ID</td></tr>
-           </table>
+             <tr><td><input type="checkbox" name="id" value="1" ';if (isset($_POST['id'])) echo ' checked="checked"'; echo '> Object ID</td></tr>
+             <tr class="odd"><td><input type="checkbox" name="mount_info" value="1" ';if (isset($_POST['mount_info'])) echo ' checked="checked"'; echo '> Mount Info</td></tr>
+	   </table>
          </td>';
 
     echo '<td valign="top">
@@ -446,6 +458,10 @@ function renderCustomReport()
 
         if ( isset( $_POST['id'] ) ) {
             echo '<th>Object ID</th>';
+        }
+
+        if ( isset( $_POST['mount_info'] ) ) {
+            echo '<th>Mount Info</th>';
         }
 
         echo '  </tr>
@@ -645,6 +661,11 @@ function renderCustomReport()
                 echo '</td>';
             }
 
+            if ( isset( $_POST['mount_info'] ) ) {
+                echo '<td>';
+		echo getMountInfoSummary($Result);
+                echo '</td>';
+            }
             echo '</tr>';
 
         }
