@@ -507,7 +507,10 @@ function renderRackspace ()
 							echo getRackImageHeight ($rack['height']);
 							echo " title='${rack['height']} units'";
 							echo "src='?module=image&img=minirack&rack_id=${rack['id']}'>";
-							echo "<br>${rack['name']}</a></td>";
+							echo "<br>${rack['name']}</a>";
+							$attribs = getAttrValues ($rack['id']);
+							echo "<br>&nbsp;<small>" . $attribs[10006]['value'] . "</small>";
+							echo "&nbsp;</td>";
 							$rackListIdx++;
 						}
 					$order = $nextorder[$order];
@@ -702,7 +705,10 @@ function renderRow ($row_id)
 		echo "<img border=0 width=${rackwidth} height=" . (getRackImageHeight ($rack['height']) * getConfigVar ('ROW_SCALE'));
 		echo " title='${rack['height']} units'";
 		echo "src='?module=image&img=midirack&rack_id=${rack['id']}&scale=" . getConfigVar ('ROW_SCALE') . "'>";
-		echo "<br>${rack['name']}</a></td>";
+		echo "<br>${rack['name']}</a>";
+		$attribs = getAttrValues ($rack['id']);
+		echo "<br>&nbsp;<small>" . $attribs[10006]['value'] . "</small>";
+		echo "&nbsp;</td>";
 		$order = $nextorder[$order];
 		$rackListIdx++;
 	}
