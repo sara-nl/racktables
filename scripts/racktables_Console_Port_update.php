@@ -127,7 +127,8 @@ function updateRackTables($snmphash)
 			else if ($label['snmp'] !== $label['db']) 
 			{
 				echo $label['snmp']." ".$label['db'];
-				commitUpdatePort ($ports[$console_server][$port]['object_id'], $ports[$console_server][$port]['id'], $port, 24, $label['snmp'], "", "");
+				//commitUpdatePort ($ports[$console_server][$port]['object_id'], $ports[$console_server][$port]['id'], $port, 24, $label['snmp'], "", "");
+				commitUpdatePort ($ports[$console_server][$port]['id'], $port, 24, $label['snmp'], "", "");
 			} 
 		}
 	}
