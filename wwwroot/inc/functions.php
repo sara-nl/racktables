@@ -5252,16 +5252,20 @@ function isEthernetPort($port)
 
 function loadConfigDefaults()
 {
-	$ret = loadConfigCache();
-	if (!count ($ret))
-		throw new RackTablesError ('Failed to load configuration from the database.', RackTablesError::INTERNAL);
-	foreach ($ret as $varname => &$row)
-	{
-		$row['is_altered'] = 'no';
-		if ($row['vartype'] == 'uint') $row['varvalue'] = 0 + $row['varvalue'];
-		$row['defaultvalue'] = $row['varvalue'];
-	}
-	return $ret;
+    $ret = loadConfigCache();
+    if (count($ret) === 0) {
+        throw new RackTablesError('Failed to load configuration from the database.', RackTablesError::INTERNAL);
+    }
+
+    foreach ($ret as $varname => $row) {
+        $ret[$varname]['is_altered'] = 'no';
+        if ($row['vartype'] === 'uint') {
+            $ret[$varname]['varvalue'] = (int) $row['varvalue'];
+        }
+        $ret[$varname]['defaultvalue'] = $ret[$varname]['varvalue'];
+    }
+
+    return $ret;
 }
 
 function alterConfigWithUserPreferences()
