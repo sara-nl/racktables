@@ -417,39 +417,37 @@ function escapeString ($value, $do_db_escape = FALSE)
 function transformRequestData()
 {
 	global $sic;
-	// Magic quotes feature is deprecated, but just in case the local system
-	// still has it activated, reverse its effect.
-	$do_magic_quotes = (function_exists ('get_magic_quotes_gpc') and get_magic_quotes_gpc());
-	$seen_keys = array();
 
-	// Escape any globals before we ever try to use them, but keep a copy of originals.
+	$seen_keys = array();
 	$sic = array();
-	// walk through merged GET and POST instead of REQUEST array because it
-	// can contain cookies with data that could not be decoded from UTF-8
+
+	// Walk through merged GET and POST instead of REQUEST
 	foreach (($_POST + $_GET) as $key => $value)
 	{
-		if (is_array ($value))
+		if (is_array($value)) {
 			$_REQUEST[$key] = $value;
-		else
-		{
-			$value = dos2unix ($value);
-			if ($do_magic_quotes)
-				$value = stripslashes ($value);
-			$_REQUEST[$key] = escapeString ($value);
+		} else {
+			$value = dos2unix($value);
+			$_REQUEST[$key] = escapeString($value);
 		}
 		$sic[$key] = $value;
 		$seen_keys[$key] = 1;
 	}
 
-	// delete cookie information from the $_REQUEST array
-	foreach (array_keys ($_REQUEST) as $key)
-		if (! isset ($seen_keys[$key]))
-			unset ($_REQUEST[$key]);
+	// Remove cookie data from $_REQUEST
+	foreach (array_keys($_REQUEST) as $key) {
+		if (!isset($seen_keys[$key])) {
+			unset($_REQUEST[$key]);
+		}
+	}
 
-	if (isset ($_SERVER['PHP_AUTH_USER']))
-		$_SERVER['PHP_AUTH_USER'] = escapeString ($_SERVER['PHP_AUTH_USER']);
-	if (isset ($_SERVER['REMOTE_USER']))
-		$_SERVER['REMOTE_USER'] = escapeString ($_SERVER['REMOTE_USER']);
+	// Escape authentication-related values
+	if (isset($_SERVER['PHP_AUTH_USER'])) {
+		$_SERVER['PHP_AUTH_USER'] = escapeString($_SERVER['PHP_AUTH_USER']);
+	}
+	if (isset($_SERVER['REMOTE_USER'])) {
+		$_SERVER['REMOTE_USER'] = escapeString($_SERVER['REMOTE_USER']);
+	}
 }
 
 // JS scripts should be included through this function.
