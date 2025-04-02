@@ -2,6 +2,19 @@
 
 $TRAC_WIKI_PAGE = 'Console_servers';
 
+// Log function to echo and write to log file
+function log_message($message) {
+    $timestamp = date('d/M/Y:H:i:s O');
+    $formatted_message = "[$timestamp] $message\n";
+
+    // Echo to stdout
+    echo $formatted_message;
+
+    // Write to log file
+    $log_dir = getenv('RACKTABLES_LOG_DIR') ?: '/tmp';
+    file_put_contents("$log_dir/racktables_Console_Port_update.log", $formatted_message, FILE_APPEND);
+}
+
 // Gets port info from a console server
 function getSNMP_Console_Info ($host, $SNMP_community) {
 	
@@ -30,18 +43,18 @@ function getSNMP_Console_Info ($host, $SNMP_community) {
 
 // XML-RPC Function
 function do_call($url, $port, $request) {
- 
+
     $header[] = "Content-type: text/xml";
     $header[] = "Content-length: ".strlen($request);
-   
-    $ch = curl_init();  
+
+    $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_TIMEOUT, 1);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
-	curl_setopt($ch, CURLOPT_TIMEOUT,30);
-    $data = curl_exec($ch);      
+    curl_setopt($ch, CURLOPT_TIMEOUT,30);
+    $data = curl_exec($ch);
     if (curl_errno($ch)) {
         print curl_error($ch);
     } else {
@@ -143,9 +156,7 @@ include dirname(__FILE__).'/../wwwroot/inc/init.php';
 
 global $RPC_URL;   // Contains RPC user and password, is defined in secret.php
 
-// Open syslog
-openlog('Console_Port_check', LOG_PID | LOG_ODELAY,LOG_LOCAL7);
-syslog(LOG_INFO, "--- racktables_Console_Port_update.php started ---");
+log_message("racktables_Console_Port_update.php started");
 
 // Make a list of all console server objects
 $result = usePreparedSelectBlade ("select Object.id, Object.name ,AttributeValue.string_value as community from Object 
@@ -170,10 +181,10 @@ while ($row = $result->fetch (PDO::FETCH_ASSOC)) {
 foreach ($consoles as $console)
 {
 	if (strlen($console['FQDN']) == 0) {
-		syslog(LOG_INFO, "No FQDN found for object: ".$console['name']);
+		log_message("No FQDN found for object: ".$console['name']);
 	}
     if (strlen($console['community']) == 0) {
-        syslog(LOG_INFO, "No SNMP community found for object: ".$console['name']);
+        log_message("No SNMP community found for object: ".$console['name']);
     }
 
 	if ((strlen($console['FQDN']) != 0) & (strlen($console['community']) != 0)) {
@@ -183,7 +194,7 @@ foreach ($consoles as $console)
 			$snmphash[$console['FQDN']] = $SNMP_Console_Info;
 		}
 		else {
-			syslog(LOG_INFO, "No info received from host: ".$console['FQDN']);
+			log_message("No info received from host: ".$console['FQDN']);
 		}
 	}
 }
@@ -193,19 +204,17 @@ $result = updateTracPage($RPC_URL, $TRAC_WIKI_PAGE);
 if (strpos($result,"NO_TAG_FOUND") !== false)
 {
 	$data = preg_split("/,/",$result);
-	syslog(LOG_INFO, "No [=#console_table] tag detected, (page length: ". $data[1] .") wikipage $TRAC_WIKI_PAGE not updated");
+	log_message("No [=#console_table] tag detected, (page length: ". $data[1] .") wikipage $TRAC_WIKI_PAGE not updated");
 }
 if ($result == "NO_CHANGE")
 {
-	syslog(LOG_INFO, "No changes detected, wikipage $TRAC_WIKI_PAGE not updated");
+	log_message("No changes detected, wikipage $TRAC_WIKI_PAGE not updated");
 }
 if ($result == "OK")
 {
-	syslog(LOG_INFO, "wikipage: $TRAC_WIKI_PAGE updated");
+	log_message("wikipage: $TRAC_WIKI_PAGE updated");
 }
 
-// Close syslog
-syslog(LOG_INFO, "--- racktables_Console_Port_update.php finished ---");
-closelog();
+log_message("racktables_Console_Port_update.php finished");
 
 ?>
