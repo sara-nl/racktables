@@ -911,7 +911,7 @@ http://www.cisco.com/en/US/products/hw/routers/ps274/products_tech_note09186a008
 			case 'ssv1':
 				$words = explode (' ', $line);
 				if (!strlen ($words[0]) or !strlen ($words[1]))
-					continue;
+					continue 2;
 				$ports[] = array
 				(
 					'name' => $words[0],
@@ -1661,23 +1661,23 @@ function addRealServers ()
 			case 'ipvs_2': // address and port only
 				if (!preg_match ('/^  -> ([0-9\.]+):([0-9]+) /', $line, $match))
 					if (!preg_match ('/^  -> \[([0-9a-fA-F:]+)\]:([0-9]+) /', $line, $match))
-						continue;
+						continue 2;
 				addRStoRSPool (getBypassValue(), ip_parse ($match[1]), $match[2], getConfigVar ('DEFAULT_IPV4_RS_INSERVICE'), '');
 				break;
 			case 'ipvs_3': // address, port and weight
 				if (!preg_match ('/^  -> ([0-9\.]+):([0-9]+) +[a-zA-Z]+ +([0-9]+) /', $line, $match))
 					if (!preg_match ('/^  -> \[([0-9a-fA-F:]+)\]:([0-9]+) +[a-zA-Z]+ +([0-9]+) /', $line, $match))
-						continue;
+						continue 2;
 				addRStoRSPool (getBypassValue(), ip_parse ($match[1]), $match[2], getConfigVar ('DEFAULT_IPV4_RS_INSERVICE'), 'weight ' . $match[3]);
 				break;
 			case 'ssv_2': // IP address and port
 				if (!preg_match ('/^([0-9\.a-fA-F:]+) ([0-9]+)$/', $line, $match))
-					continue;
+					continue 2;
 				addRStoRSPool (getBypassValue(), ip_parse ($match[1]), $match[2], getConfigVar ('DEFAULT_IPV4_RS_INSERVICE'), '');
 				break;
 			case 'ssv_1': // IP address
 				if (! $ip_bin = ip_checkparse ($line))
-					continue;
+					continue 2;
 				addRStoRSPool (getBypassValue(), $ip_bin, 0, getConfigVar ('DEFAULT_IPV4_RS_INSERVICE'), '');
 				break;
 			default:
